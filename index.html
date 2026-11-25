@@ -267,7 +267,7 @@ dialog::backdrop{background:#0009;backdrop-filter:blur(3px)}
     <div class="status"><h1 id="title">Browse</h1><p id="count" aria-live="polite"></p></div>
     <div class="hint" id="hint" hidden><span>No services picked yet, so this shows everything available in your country.</span><button class="btn sm" data-open-settings>Pick my services</button></div>
     <div class="grid" id="grid"></div>
-    <div class="foot"><div class="loading" id="spin" role="status" aria-live="polite" hidden><div class="spin"></div><span id="spinTxt">Loading…</span></div><button class="btn ghost" id="more" hidden>Load more</button></div>
+    <div class="foot"><div class="loading" id="spin" role="status" aria-live="polite" hidden><div class="spin"></div><span id="spinTxt">Loading…</span></div></div>
   </main>
 </div>
 <footer>Data from TMDB. This product uses the TMDB API but is not endorsed or certified by TMDB. Streaming availability is provided by JustWatch through TMDB.</footer>
@@ -406,7 +406,7 @@ function certList(type){
 /* Ratings that are never shown. Movies: NR/unrated, R and NC-17 in the US. Shows: NR/unrated and TV-MA in the US.
    Elsewhere, the country's top rating for that type (18, R18 and the like). */
 function blockedCerts(type){
-  const L=certList(type),top=L.length>1?L[L.length-1].certification:'',us=st.region==='US';
+  const us=st.region==='US',L=certList(type),top=!us&&L.length>1?L[L.length-1].certification:'';
   return new Set((type==='movie'?['NR','NC-17',us?'R':'',top]:['NR',us?'TV-MA':'',top]).filter(Boolean));
 }
 /* Keywords: excluded ones must be absent; included ones must match any or all, per the toggle. */
@@ -544,7 +544,7 @@ async function pullRound(S){
 let token=0;
 const PAGE=24,CAP=1200;
 const B={matched:[],shown:0,keys:new Set(),seen:new Set(),sources:[],done:true,search:false,summary:'',checked:0,kept:0,cand:0,cap:CAP,waiters:[],failed:null};
-const progress=t=>{$('#spinTxt').textContent=t};
+const progress=t=>{if(!B.shown||t==='Loading more…')$('#spinTxt').textContent=t};
 const capped=()=>B.done&&B.sources.length>0;
 function notify(){B.waiters=B.waiters.filter(w=>{if(B.matched.length>=w.n||B.done){w.res();return false}return true})}
 const waitFor=n=>new Promise(res=>{B.waiters.push({n,res});notify()});
@@ -554,7 +554,7 @@ async function browse(){
   const my=++token,f=st.f,q=f.q.trim(),types=activeTypes();
   B.waiters.forEach(w=>w.res());
   Object.assign(B,{matched:[],shown:0,keys:new Set(),seen:new Set(),sources:[],done:false,search:!!q,summary:'',checked:0,kept:0,cand:0,cap:CAP,waiters:[],failed:null});
-  $('#grid').innerHTML='';$('#count').innerHTML='';$('#more').hidden=true;
+  $('#grid').innerHTML='';$('#count').innerHTML='';
   $('#title').textContent=q?`“${q}”`:(st.type==='movie'?'Movies':st.type==='tv'?'Shows':'Movies & shows')+(st.mine.length?' on your services':'');
   $('#hint').hidden=!!st.mine.length;
   if(!types.length){B.done=true;finish(my,emptyHTML('No genre match',"Those genres don't exist for this type. Try Any instead of All, or another type."));return}
@@ -564,7 +564,7 @@ async function browse(){
   if(my!==token) return;
   B.summary=B.sources.summary||'';
   scan(my);
-  showMore(my);
+  pump(my);
 }
 async function scan(my){
   const f=st.f,q=f.q.trim(),types=activeTypes();
@@ -585,30 +585,45 @@ async function scan(my){
   if(my!==token) return;
   B.done=true;notify();updateStatus(my);
 }
-async function showMore(my){
-  if(B.rendering) return;B.rendering=true;
+/* Continuous scrolling: keep rendering while the end of the list is within ~1500px of the screen.
+   If the reader catches up with the background scan, show "Loading more…" until more titles are verified.
+   Past the counting cap, scrolling simply extends the scan. */
+const AHEAD=1500;
+const nearEnd=()=>$('.foot').getBoundingClientRect().top<innerHeight+AHEAD;
+async function pump(my){
+  if(B.pumping) return;B.pumping=true;
   try{
-    const target=B.shown+PAGE;
-    await waitFor(target);
-    if(my!==token) return;
-    const next=B.matched.slice(B.shown,target);B.shown+=next.length;
-    $('#grid .empty')?.remove();
-    $('#grid').insertAdjacentHTML('beforeend',next.filter(visible).map(card).join(''));
-    updateStatus(my);
-  }finally{B.rendering=false}
+    while(my===token&&view==='browse'&&nearEnd()){
+      if(B.shown>=B.matched.length){
+        if(B.done&&!(capped()&&B.matched.length)) break;
+        if(B.done) keepScanning();
+        B.waiting=true;updateStatus(my);
+        await waitFor(B.shown+1);
+        B.waiting=false;
+        if(my!==token) break;
+        continue;
+      }
+      const next=B.matched.slice(B.shown,B.shown+PAGE);B.shown+=next.length;
+      $('#grid .empty')?.remove();
+      $('#grid').insertAdjacentHTML('beforeend',next.filter(visible).map(card).join(''));
+      updateStatus(my);
+      await new Promise(r=>requestAnimationFrame(r));
+    }
+  }finally{B.pumping=false;B.waiting=false;updateStatus(my)}
 }
 function finish(my,emptyMsg){if(my!==token)return;$('#spin').hidden=true;$('#grid').innerHTML=emptyMsg;$('#count').innerHTML=''}
 function updateStatus(my){
   if(my!==token||view!=='browse') return;
   $('#count').innerHTML=countHTML();
-  $('#spin').hidden=B.done;
-  $('#more').hidden=!(B.shown<B.matched.length);
+  const first=!B.shown&&!B.done;
+  $('#spin').hidden=!(first||B.waiting);
+  if(B.waiting&&B.shown) progress('Loading more…');
   if(B.done&&B.failed&&!B.matched.length){showError(B.failed);return}
   if(B.done&&!B.matched.length&&!$('#grid .empty')) $('#grid').innerHTML=capped()
     ?emptyHTML('Nothing yet',`None of the first ${B.checked.toLocaleString()} titles checked match these filters. Keep looking, or loosen a filter.`,'<button class="btn" id="keep">Keep looking</button>')
     :emptyHTML('Nothing matches','Try loosening a filter or adding a service.');
   if(B.done&&capped()&&B.matched.length&&!$('#keepcount')) $('#count').insertAdjacentHTML('beforeend',' <button class="link" id="keepcount">Keep counting</button>');
-  if(B.shown<PAGE&&B.matched.length>B.shown&&!B.rendering) showMore(my);
+  if(!B.pumping&&B.shown<B.matched.length&&nearEnd()) pump(my);
 }
 function keepScanning(){B.cap+=CAP;B.done=false;$('#grid .empty')?.remove();scan(token);updateStatus(token)}
 /* Result count. Browsing: when more pages remain, estimate the total from TMDB's candidate count times the share of checked titles that passed. */
@@ -671,7 +686,7 @@ function renderWatchlist(){
   L.forEach(it=>items.set(key(it),it));
   $('#title').textContent=wlMode==='todo'?'To watch':wlMode==='seen'?'Seen':'Everything saved';
   $('#count').textContent=`${L.length} title${L.length===1?'':'s'}`;
-  $('#hint').hidden=true;$('#more').hidden=true;$('#spin').hidden=true;
+  $('#hint').hidden=true;$('#spin').hidden=true;
   $('#grid').innerHTML=L.length?L.map(card).join(''):emptyHTML('Nothing here yet','Tap the bookmark on any title to add it, or the check to mark it seen.');
   if(meta.genres.movie.length) pool(L.filter(it=>!info.has(key(it))),6,async it=>{await getInfo(it.type,it.id);paintInfo(key(it))});
 }
@@ -919,10 +934,11 @@ $('#psave').addEventListener('click',()=>{
 });
 $('#pname').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#psave').click()}});
 $('#freset').addEventListener('click',()=>{st.f={...DEF_F,q:st.f.q};syncControls();later(0)});
-$('#more').addEventListener('click',()=>showMore(token));
 $('#grid').addEventListener('click',e=>{if(e.target.closest('#keep'))keepScanning()});
 $('#count').addEventListener('click',e=>{if(e.target.closest('#keepcount')){e.target.remove();keepScanning()}});
-new IntersectionObserver(es=>{if(es[0].isIntersecting&&view==='browse'&&B.shown&&B.shown<B.matched.length)showMore(token)},{rootMargin:'600px'}).observe($('.foot'));
+let scrollQueued=false;
+const onScroll=()=>{if(scrollQueued)return;scrollQueued=true;requestAnimationFrame(()=>{scrollQueued=false;if(view==='browse'&&nearEnd())pump(token)})};
+addEventListener('scroll',onScroll,{passive:true});addEventListener('resize',onScroll);
 $('#fbtn').addEventListener('click',()=>document.body.classList.add('fopen'));
 $('#fclose').addEventListener('click',()=>document.body.classList.remove('fopen'));
 $('#scrim').addEventListener('click',()=>document.body.classList.remove('fopen'));
