@@ -89,6 +89,12 @@ input[type=range]{width:100%;accent-color:var(--acc)}
 .status{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin:4px 0 16px}
 .status h1{margin:0;font-size:clamp(26px,3.4vw,40px);font-stretch:70%;font-weight:800;line-height:1.05;text-wrap:balance}
 .status p{margin:0;color:var(--mute);font-size:14px}
+.status #count{font-size:15px;color:var(--ink)}
+.status #count b{font-size:22px;font-weight:800;font-stretch:72%;margin-right:4px}
+.status #count span{color:var(--mute)}
+.banner{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:var(--ink);color:var(--bg);border-radius:12px;padding:12px 16px;margin-bottom:16px}
+.banner .row{gap:8px}
+.share{width:100%;font-size:13px;margin-top:8px}
 .hint{background:var(--accSoft);border-radius:12px;padding:10px 14px;font-size:14px;margin-bottom:16px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(152px,1fr));gap:24px 16px}
@@ -255,7 +261,8 @@ dialog::backdrop{background:#0009;backdrop-filter:blur(3px)}
     <div class="bar" id="wbar" hidden>
       <div class="seg" id="wlmode"><button data-w="todo" aria-pressed="true">To watch</button><button data-w="seen" aria-pressed="false">Seen</button><button data-w="all" aria-pressed="false">All saved</button></div>
     </div>
-    <div class="status"><h1 id="title">Browse</h1><p id="count"></p></div>
+    <div class="banner" id="banner" hidden></div>
+    <div class="status"><h1 id="title">Browse</h1><p id="count" aria-live="polite"></p></div>
     <div class="hint" id="hint" hidden><span>No services picked yet, so this shows everything available in your country.</span><button class="btn sm" data-open-settings>Pick my services</button></div>
     <div class="grid" id="grid"></div>
     <div class="foot"><div class="loading" id="spin" role="status" aria-live="polite" hidden><div class="spin"></div><span id="spinTxt">Loading…</span></div><button class="btn ghost" id="more" hidden>Load more</button></div>
@@ -283,6 +290,13 @@ dialog::backdrop{background:#0009;backdrop-filter:blur(3px)}
       <input id="pq" class="inp" placeholder="Find a service: Netflix, Max, Tubi…" autocomplete="off">
       <div id="pgrid" class="pgrid"></div>
       <button type="button" id="pall" class="btn ghost sm">Show all services</button>
+    </section>
+    <section class="ss" id="sshare" hidden>
+      <h3>4. Share this setup</h3>
+      <p class="note">Makes a link that sets up another phone or browser with your TMDB key, country, services and filters. Each device keeps its own watchlist and can change its own settings afterwards. Anyone with the link can use your TMDB key, so only send it to family.</p>
+      <div class="row"><button type="button" class="btn" id="sharebtn">Share setup link</button></div>
+      <input id="sharelink" class="inp share" readonly hidden aria-label="Setup link">
+      <p id="sharemsg" class="msg" role="status"></p>
     </section>
     <div class="sfoot"><button class="btn" value="done">Done</button></div>
   </form>
@@ -481,7 +495,7 @@ function listSource(fetchAll,size=20){
 }
 const tagVia=(it,via)=>(it.via=via,it);
 const nameHit=(name,q)=>{const n=(name||'').toLowerCase();return q.toLowerCase().split(/\s+/).filter(Boolean).every(w=>n.includes(w))};
-function discoverSources(types){return types.map(t=>({next:pagedSource(pg=>api(`/discover/${t}`,params(t,pg)),r=>norm(t,r))}))}
+function discoverSources(types){return types.map(t=>({next:pagedSource(pg=>api(`/discover/${t}`,params(t,pg)).then(d=>{if(pg===1)B.cand+=d.total_results||0;return d}),r=>norm(t,r))}))}
 /* Global search: titles, people (everything they acted in or made), franchises, keywords, studios and genres.
    Sources are listed in relevance order; a title found by several keeps the first reason. */
 async function searchSources(q,types){
@@ -517,14 +531,14 @@ async function pullRound(S){
 
 /* ---------- Browse ---------- */
 let token=0;
-const B={list:[],keys:new Set(),sources:[],more:false,busy:false,search:false,summary:'',checked:0};
+const B={list:[],keys:new Set(),sources:[],more:false,busy:false,search:false,summary:'',checked:0,kept:0,cand:0};
 const progress=t=>{$('#spinTxt').textContent=t};
 async function browse(reset){
   if(!meta.genres.movie.length) return;
   if(!reset&&(B.busy||!B.more)) return;
   const my=reset?++token:token;
   const f=st.f,q=f.q.trim(),types=activeTypes();
-  if(reset){Object.assign(B,{list:[],keys:new Set(),sources:[],more:true,search:!!q,summary:'',checked:0});$('#grid').innerHTML='';$('#count').textContent=''}
+  if(reset){Object.assign(B,{list:[],keys:new Set(),sources:[],more:true,search:!!q,summary:'',checked:0,kept:0,cand:0});$('#grid').innerHTML='';$('#count').textContent=''}
   $('#title').textContent=q?`“${q}”`:(st.type==='movie'?'Movies':st.type==='tv'?'Shows':'Movies & shows')+(st.mine.length?' on your services':'');
   $('#hint').hidden=!!st.mine.length;
   B.busy=true;$('#more').hidden=true;$('#spin').hidden=false;progress(q&&reset?'Searching titles, people, keywords, studios…':'Finding titles…');
@@ -547,6 +561,7 @@ async function browse(reset){
       await pool(c,10,async it=>{await getInfo(it.type,it.id);if(my===token)progress(`Checking titles against your services and filters… ${++B.checked} checked`)});
       if(my!==token) return;
       c=c.filter(it=>baseOk(it)&&originOk(it));
+      B.kept+=c.length;
       if(types.length>1&&!q) c.sort(cmp[f.sort]);
       fresh.push(...c);
       B.more=B.sources.length>0;
@@ -560,11 +575,20 @@ async function browse(reset){
     if(my===token){
       B.busy=false;$('#spin').hidden=true;$('#more').hidden=!B.more;
       const n=$$('#grid .card').length;
-      $('#count').textContent=B.search?`${n} match${n===1?'':'es'} on your services${B.summary?' · also searched '+B.summary:''}`:`${n} title${n===1?'':'s'} shown`;
+      $('#count').innerHTML=countHTML(n);
       if(!n&&!$('#grid .empty')) $('#grid').innerHTML=!types.length?emptyHTML('No genre match',"Those genres don't exist for this type. Try Any instead of All, or another type."):B.more?emptyHTML('Nothing yet','None of the titles checked so far match these filters. Keep looking, or loosen a filter.','<button class="btn" id="keep">Keep looking</button>'):emptyHTML('Nothing matches','Try loosening a filter or adding a service.');
       if(!n&&B.more) $('#more').hidden=true;
     }
   }
+}
+/* Result count. Browsing: when more pages remain, estimate the total from TMDB's candidate count times the share of checked titles that passed. */
+const fmtN=x=>x>=1000?Number(x.toPrecision(2)).toLocaleString():String(x);
+function countHTML(n){
+  const tail=B.summary?`<span> · also searched ${esc(B.summary)}</span>`:'';
+  if(B.search) return `<b>${n}</b> ${n===1?'match':'matches'} on your services${B.more?'<span> so far</span>':''}${tail}`;
+  if(!B.more) return `<b>${n}</b> ${n===1?'title':'titles'}`;
+  const est=B.checked>=20&&B.cand?Math.max(n,Math.round(B.cand*B.kept/B.checked)):0;
+  return `<b>${n}</b> shown${est>n?`<span> of about ${fmtN(est)}</span>`:''}`;
 }
 const visible=it=>!(st.f.hideSeen&&st.list[key(it)]?.seen);
 const emptyHTML=(h,p,btn)=>`<div class="empty"><h2>${esc(h)}</h2><p>${esc(p)}</p>${btn||''}</div>`;
@@ -649,6 +673,24 @@ ${cast?`<div class="dsec"><h3>Cast</h3><p>${cast}</p></div>`:''}
   }catch(e){$('#dbody').innerHTML=`<div class="dload">${esc(errText(e))}<br><br><button class="btn ghost" data-close>Close</button></div>`}
 }
 
+/* ---------- Share setup ----------
+   The setup travels in the link's #fragment, which browsers never send to a server. Watchlists stay on each device. */
+const b64e=o=>btoa(unescape(encodeURIComponent(JSON.stringify(o)))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+const b64d=t=>JSON.parse(decodeURIComponent(escape(atob(t.replace(/-/g,'+').replace(/_/g,'/')))));
+function shareLink(){return location.origin+location.pathname+'#setup='+b64e({v:1,key:st.key,region:st.region,mine:st.mine,type:st.type,f:st.f,presets:st.presets})}
+function readShared(){
+  const m=location.hash.match(/^#setup=([A-Za-z0-9_-]+)$/);if(!m) return null;
+  history.replaceState(null,'',location.pathname+location.search);
+  try{const d=b64d(m[1]);return d&&d.v===1&&typeof d.key==='string'?d:null}catch(e){return null}
+}
+function applyShared(d){
+  st={...st,key:d.key,region:d.region||'US',mine:Array.isArray(d.mine)?d.mine:[],type:['movie','tv','both'].includes(d.type)?d.type:'movie',f:{...DEF_F,...(d.f||{})},presets:Array.isArray(d.presets)?d.presets:st.presets};
+  if(!st.f.certs||!Array.isArray(st.f.certs.movie)||!Array.isArray(st.f.certs.tv))st.f.certs={movie:[],tv:[]};
+  ['kw','svcOff','genres','mono'].forEach(k=>{if(!Array.isArray(st.f[k]))st.f[k]=[...DEF_F[k]]});
+  cache.clear();info.clear();save();
+}
+function showBanner(html){const b=$('#banner');b.innerHTML=html;b.hidden=!html}
+
 /* ---------- Settings ---------- */
 /* Service toggles above the search bar: each of your services can be switched off for the current search. */
 function renderSvcs(){
@@ -675,7 +717,7 @@ function renderProvGrid(){
 }
 function renderSettings(){
   const ok=meta.providers.length>0;
-  $('#sreg').hidden=!ok;$('#sprov').hidden=!ok;
+  $('#sreg').hidden=!ok;$('#sprov').hidden=!ok;$('#sshare').hidden=!ok;
   if(ok){
     $('#region').innerHTML=meta.regions.map(r=>`<option value="${esc(r.iso_3166_1)}">${esc(r.english_name)}</option>`).join('');
     $('#region').value=st.region;renderProvGrid();
@@ -862,6 +904,13 @@ async function saveKey(){
   catch(e){$('#keymsg').textContent=errText(e);$('#keymsg').className='msg bad'}
 }
 $('#keysave').addEventListener('click',saveKey);
+$('#sharebtn').addEventListener('click',async()=>{
+  const url=shareLink(),msg=$('#sharemsg'),box=$('#sharelink');
+  msg.className='msg';
+  if(navigator.share&&matchMedia('(pointer:coarse)').matches){try{await navigator.share({title:'Reel Index setup',url});msg.textContent='Shared.';return}catch(e){if(e.name==='AbortError')return}}
+  try{await navigator.clipboard.writeText(url);msg.textContent='Link copied. Paste it into a text or open it on the other device.'}
+  catch(e){box.hidden=false;box.value=url;box.select();msg.textContent='Copy the link above and send it to the other device.'}
+});
 $('#key').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();saveKey()}});
 $('#pq').addEventListener('keydown',e=>{if(e.key==='Enter')e.preventDefault()});
 $('#pq').addEventListener('input',renderProvGrid);
@@ -875,7 +924,20 @@ $('#settings').addEventListener('close',()=>{if(dirty&&meta.genres.movie.length)
 ['#settings','#detail'].forEach(s=>$(s).addEventListener('click',e=>{if(e.target===$(s))$(s).close()}));
 
 /* ---------- Start ---------- */
+/* A shared setup applies straight away on a fresh device; on a set-up device it asks first. */
+const shared=readShared(),fresh=!st.key;
+if(shared&&fresh) applyShared(shared);
 renderSvcs();wlCount();
+const differs=d=>JSON.stringify([d.key,d.region,d.mine,d.f])!==JSON.stringify([st.key,st.region,st.mine,st.f]);
+function offerShared(d){
+  if(!differs(d)) return;
+  showBanner('<span>Someone shared a Reel Index setup with you. Use it here? It replaces this device\'s key, services and filters; your watchlist stays.</span><span class="row"><button class="btn sm" id="useShared">Use shared setup</button><button class="btn ghost sm" id="skipShared">Keep mine</button></span>');
+  $('#useShared').addEventListener('click',()=>{applyShared(d);showBanner('');connect()});
+  $('#skipShared').addEventListener('click',()=>showBanner(''));
+}
+if(shared&&!fresh) offerShared(shared);
+/* A link opened in a tab that already has the app loaded only changes the #fragment, without reloading. */
+addEventListener('hashchange',()=>{const d=readShared();if(!d)return;if(st.key)offerShared(d);else{applyShared(d);connect()}});
 if(st.key){$('#spin').hidden=false;connect()}
 else{
   $('#title').textContent='Your streaming directory';
