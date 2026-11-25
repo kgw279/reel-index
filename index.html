@@ -4,6 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Reel Index</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Reel Index">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f6f5f3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111014" media="(prefers-color-scheme: dark)">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
@@ -278,7 +287,8 @@ dialog::backdrop{background:#0009;backdrop-filter:blur(3px)}
     <section class="ss">
       <h3>1. TMDB key</h3>
       <p class="note">Get a free one at <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">themoviedb.org → Settings → API</a>. Paste either the API Key or the API Read Access Token. It's saved only in this browser.</p>
-      <div class="row"><input id="key" class="inp grow" type="password" autocomplete="off" spellcheck="false" placeholder="Paste key or token"><button type="button" id="keyshow" class="btn ghost">Show</button><button type="button" id="keysave" class="btn">Connect</button></div>
+      <p class="note" id="pwahint" hidden><b>Using the Home Screen app?</b> It keeps its own storage, separate from Safari. In Safari's Reel Index, open Setup → Share setup link, copy it, then paste the whole link here and tap Connect.</p>
+      <div class="row"><input id="key" class="inp grow" type="password" autocomplete="off" spellcheck="false" placeholder="Paste key, token, or setup link"><button type="button" id="keyshow" class="btn ghost">Show</button><button type="button" id="keysave" class="btn">Connect</button></div>
       <p id="keymsg" class="msg" role="status"></p>
     </section>
     <section class="ss" id="sreg" hidden>
@@ -772,7 +782,9 @@ function renderSettings(){
     $('#region').value=st.region;renderProvGrid();
   }
 }
+const standalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
 function openSettings(msg){
+  $('#pwahint').hidden=!(standalone()&&!st.key);
   $('#key').value=st.key;
   $('#keymsg').textContent=msg||'';$('#keymsg').className='msg'+(msg?' bad':'');
   renderSettings();
@@ -949,7 +961,14 @@ $('#keyshow').addEventListener('click',()=>{const k=$('#key');k.type=k.type==='p
 async function saveKey(){
   const v=$('#key').value.trim();
   if(!v){$('#keymsg').textContent='Paste a key first.';$('#keymsg').className='msg bad';return}
-  st.key=v;cache.clear();info.clear();save();
+  /* A pasted setup link imports everything at once (the way into a Home Screen app, which has no address bar). */
+  const m=v.match(/#setup=([A-Za-z0-9_-]+)/);
+  if(m){
+    let d=null;try{d=b64d(m[1])}catch(e){}
+    if(!d||d.v!==1||typeof d.key!=='string'){$('#keymsg').textContent="That setup link looks incomplete. Copy it again from Setup → Share setup link.";$('#keymsg').className='msg bad';return}
+    applyShared(d);$('#key').value=st.key;
+  }else st.key=v;
+  cache.clear();info.clear();save();
   $('#keymsg').textContent='Connecting…';$('#keymsg').className='msg';
   try{await loadMeta();renderFilterOptions();syncControls();renderSvcs();wlCount();renderSettings();dirty=true;
     $('#keymsg').textContent=st.mine.length?'Connected.':'Connected. Now pick your services below.';}
