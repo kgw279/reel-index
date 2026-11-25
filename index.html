@@ -81,6 +81,11 @@ input[type=range]{width:100%;accent-color:var(--acc)}
 .card:hover .poster{transform:translateY(-3px)}
 .poster img.p{width:100%;height:100%;object-fit:cover;display:block}
 .noimg{position:absolute;inset:0;display:grid;place-items:center;padding:14px;text-align:center;font-weight:800;font-stretch:72%;font-size:19px;color:var(--mute)}
+.cert{display:inline-block;font-size:11px;font-weight:750;letter-spacing:.02em;line-height:1;padding:4px 6px;border-radius:5px;background:#fff;color:#111;box-shadow:0 1px 4px #0006;white-space:nowrap}
+.certs{position:absolute;top:6px;left:6px}
+.dmain .cert{vertical-align:2px;margin-right:2px;box-shadow:none;border:1px solid var(--line)}
+.crow+.crow{margin-top:10px}
+.crow>span{display:block;font-size:12px;color:var(--mute);margin-bottom:5px}
 .badges{position:absolute;left:6px;bottom:6px;right:6px;display:flex;gap:4px;flex-wrap:wrap}
 .badges img{width:27px;height:27px;border-radius:7px;box-shadow:0 0 0 1.5px #fff8,0 2px 6px #0008}
 .badges .sk{width:27px;height:27px;border-radius:7px;background:#fff3;animation:pulse 1.2s infinite alternate}
@@ -186,6 +191,10 @@ dialog::backdrop{background:#0009;backdrop-filter:blur(3px)}
       <div class="chips" id="genres"></div>
     </div>
     <div class="fs">
+      <h4>Age rating</h4>
+      <div id="certs"></div>
+    </div>
+    <div class="fs">
       <h4>Available as</h4>
       <div id="mono"></div>
     </div>
@@ -272,15 +281,16 @@ const MONO_SHORT={flatrate:'Stream',free:'Free',ads:'With ads',rent:'Rent',buy:'
 const SORTS=[['pop','Most popular'],['rating','Top rated'],['new','Newest'],['az','Title A–Z']];
 const ALIAS={'Action':'Action & Adventure','Adventure':'Action & Adventure','Science Fiction':'Sci-Fi & Fantasy','Fantasy':'Sci-Fi & Fantasy','War':'War & Politics','Action & Adventure':['Action','Adventure'],'Sci-Fi & Fantasy':['Science Fiction','Fantasy'],'War & Politics':['War']};
 const TV_ONLY=['Kids','News','Reality','Soap','Talk'];
-const DEF_F={q:'',genres:[],gmode:'any',yFrom:'',yTo:'',minRating:0,minVotes:50,maxRuntime:'',lang:'',mono:['flatrate','free','ads'],sort:'pop',hideSeen:false};
+const DEF_F={q:'',genres:[],gmode:'any',yFrom:'',yTo:'',minRating:0,minVotes:50,maxRuntime:'',lang:'',mono:['flatrate','free','ads'],sort:'pop',hideSeen:false,certs:{movie:[],tv:[]}};
 const ICON={bm:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M6 3h12v18l-6-4.5L6 21z"/></svg>',ck:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5L20 7"/></svg>'};
 
 let st={key:'',region:'US',mine:[],type:'movie',f:{...DEF_F},list:{},presets:[]};
 try{const s=JSON.parse(localStorage.getItem(LS)||'null');if(s)st={...st,...s,f:{...DEF_F,...(s.f||{})}}}catch(e){}
+if(!st.f.certs||!Array.isArray(st.f.certs.movie)||!Array.isArray(st.f.certs.tv))st.f.certs={movie:[],tv:[]};
 const save=()=>{try{localStorage.setItem(LS,JSON.stringify(st))}catch(e){}};
 
-const meta={regions:[],providers:[],pmap:new Map(),genres:{movie:[],tv:[]},langs:[]};
-const cache=new Map(),prov=new Map(),items=new Map();
+const meta={regions:[],providers:[],pmap:new Map(),genres:{movie:[],tv:[]},langs:[],certs:{movie:{},tv:{}}};
+const cache=new Map(),info=new Map(),items=new Map();
 let view='browse',wlMode='todo',showAllProv=false,dirty=false;
 const key=it=>it.type+':'+it.id;
 
@@ -323,18 +333,31 @@ async function loadProviders(){
   meta.pmap=m;
 }
 async function loadMeta(){
-  const [regs,gm,gt,langs]=await Promise.all([api('/watch/providers/regions'),api('/genre/movie/list'),api('/genre/tv/list'),api('/configuration/languages'),loadProviders()]);
+  const [regs,gm,gt,langs,cm,ct]=await Promise.all([api('/watch/providers/regions'),api('/genre/movie/list'),api('/genre/tv/list'),api('/configuration/languages'),api('/certification/movie/list'),api('/certification/tv/list'),loadProviders()]);
+  meta.certs={movie:cm.certifications||{},tv:ct.certifications||{}};
   meta.regions=regs.results.sort((a,b)=>a.english_name.localeCompare(b.english_name));
   meta.genres={movie:gm.genres,tv:gt.genres};
   meta.langs=langs.filter(l=>l.english_name&&l.iso_639_1!=='xx').sort((a,b)=>a.english_name.localeCompare(b.english_name));
 }
-async function getProv(type,id){
+/* One request per title returns both where it streams and its age rating in the chosen country. */
+async function getInfo(type,id){
   const k=type+':'+id;
-  if(prov.has(k)) return prov.get(k);
-  const d=await api(`/${type}/${id}/watch/providers`);
-  const r=d.results?.[st.region]||null;
-  prov.set(k,r);return r;
+  if(info.has(k)) return info.get(k);
+  const d=await api(`/${type}/${id}`,{append_to_response:type==='movie'?'watch/providers,release_dates':'watch/providers,content_ratings'});
+  const v={prov:d['watch/providers']?.results?.[st.region]||null,cert:certOf(type,d)};
+  info.set(k,v);return v;
 }
+function certOf(type,d){
+  if(type==='tv') return (d.content_ratings?.results||[]).find(r=>r.iso_3166_1===st.region)?.rating||'';
+  const rel=((d.release_dates?.results||[]).find(r=>r.iso_3166_1===st.region)?.release_dates||[]).filter(r=>r.certification);
+  return ([3,2,4,5,6,1].map(t=>rel.find(r=>r.type===t)).find(Boolean)||rel[0])?.certification||'';
+}
+function certList(type){
+  const seen=new Set();
+  return (meta.certs[type][st.region]||[]).slice().sort((a,b)=>a.order-b.order).filter(c=>c.certification&&!seen.has(c.certification)&&seen.add(c.certification));
+}
+const certOk=it=>{const sel=st.f.certs[it.type];return !sel.length||sel.includes(info.get(key(it))?.cert)};
+const needsInfo=t=>!!st.f.q.trim()||(t==='tv'&&st.f.certs.tv.length>0);
 function offers(r){
   if(!r) return [];
   const out=new Map(),mono=st.f.mono.length?st.f.mono:MONO.map(m=>m[0]);
@@ -375,6 +398,7 @@ function params(type,page){
   const p={page,sort_by:sm[f.sort],watch_region:st.region,include_adult:false,'vote_count.gte':f.minVotes||'','vote_average.gte':f.minRating||'',with_original_language:f.lang,'with_runtime.lte':f.maxRuntime};
   if(st.mine.length) p.with_watch_providers=st.mine.join('|');
   if(f.mono.length) p.with_watch_monetization_types=f.mono.join('|');
+  if(mv&&f.certs.movie.length){p.certification_country=st.region;p.certification=f.certs.movie.join('|')}
   const g=resolve(type,f.genres);
   if(g.ids.length) p.with_genres=g.ids.join(f.gmode==='all'?',':'|');
   if(f.yFrom) p[d+'.gte']=f.yFrom+'-01-01';
@@ -404,51 +428,42 @@ async function browse(reset){
   if(!reset&&(B.busy||!B.more)) return;
   const my=reset?++token:token;
   const f=st.f,q=f.q.trim(),types=activeTypes();
-  if(reset){Object.assign(B,{list:[],keys:new Set(),pages:{},total:{},results:0,more:true,search:!!q});$('#grid').innerHTML='';$('#count').textContent=''}
+  if(reset){Object.assign(B,{list:[],keys:new Set(),pages:{},total:{},results:0,more:true,search:!!q,exact:true});$('#grid').innerHTML='';$('#count').textContent=''}
   $('#title').textContent=q?`“${q}”`:(st.type==='movie'?'Movies':st.type==='tv'?'Shows':'Movies & shows')+(st.mine.length?' on your services':'');
   $('#hint').hidden=!!st.mine.length;
   B.busy=true;$('#more').hidden=true;$('#spin').hidden=false;
   try{
     if(!types.length){B.more=false;return}
-    let fresh=[];
-    if(q){
-      let tries=0;
-      while(fresh.length<12&&B.more&&tries<4){
-        tries++;
-        const got=await Promise.all(types.filter(hasMore).map(async t=>{
-          const pg=(B.pages[t]||0)+1,d=await api(`/search/${t}`,{query:q,page:pg,include_adult:false});
-          B.pages[t]=pg;B.total[t]=Math.min(d.total_pages,500);
-          return d.results.map(r=>norm(t,r));
-        }));
-        if(my!==token) return;
-        let c=got.flat().filter(it=>!B.keys.has(key(it))&&clientMatch(it));
-        await pool(c,8,it=>getProv(it.type,it.id));
-        if(my!==token) return;
-        fresh.push(...c.filter(it=>offers(prov.get(key(it))).length));
-        B.more=types.some(hasMore);
-      }
-    }else{
+    /* One loop for every mode: server filters what TMDB can; titles needing a rating or provider check get it before they are shown. */
+    let fresh=[],tries=0;
+    do{
+      tries++;
       const got=await Promise.all(types.filter(hasMore).map(async t=>{
-        const pg=(B.pages[t]||0)+1,d=await api(`/discover/${t}`,params(t,pg));
+        const pg=(B.pages[t]||0)+1,d=q?await api(`/search/${t}`,{query:q,page:pg,include_adult:false}):await api(`/discover/${t}`,params(t,pg));
         B.pages[t]=pg;B.total[t]=Math.min(d.total_pages,500);
-        if(pg===1)B.results+=d.total_results;
+        if(pg===1&&!q)B.results+=d.total_results;
         return d.results.map(r=>norm(t,r));
       }));
       if(my!==token) return;
-      fresh=got.flat();
-      if(types.length>1) fresh.sort(cmp[f.sort]);
+      let c=got.flat().filter(it=>!B.keys.has(key(it))&&(!q||clientMatch(it)));
+      await pool(c.filter(it=>needsInfo(it.type)),8,it=>getInfo(it.type,it.id));
+      if(my!==token) return;
+      c=c.filter(it=>!needsInfo(it.type)||(offers(info.get(key(it))?.prov).length&&certOk(it)));
+      if(types.length>1&&!q) c.sort(cmp[f.sort]);
+      fresh.push(...c);
       B.more=types.some(hasMore);
-    }
+    }while(fresh.length<12&&B.more&&tries<4&&types.some(needsInfo));
+    B.exact=!q&&!types.some(needsInfo);
     fresh=fresh.filter(it=>{const k=key(it);if(B.keys.has(k))return false;B.keys.add(k);items.set(k,it);return true});
     B.list.push(...fresh);
     $('#grid').insertAdjacentHTML('beforeend',fresh.filter(visible).map(card).join(''));
-    if(!q) pool(fresh,8,async it=>{await getProv(it.type,it.id);if(my===token)paintBadges(key(it))});
+    pool(fresh.filter(it=>!info.has(key(it))),8,async it=>{await getInfo(it.type,it.id);if(my===token)paintInfo(key(it))});
   }catch(e){if(my===token){B.more=false;showError(e)}}
   finally{
     if(my===token){
       B.busy=false;$('#spin').hidden=true;$('#more').hidden=!B.more;
       const n=$$('#grid .card').length;
-      $('#count').textContent=B.search?`${n} match${n===1?'':'es'} on your services · relevance order`:B.results?`About ${B.results.toLocaleString()} titles`:'';
+      $('#count').textContent=B.search?`${n} match${n===1?'':'es'} on your services · relevance order`:B.exact&&B.results?`About ${B.results.toLocaleString()} titles`:`${n} title${n===1?'':'s'} shown`;
       if(!n&&!$('#grid .empty')) $('#grid').innerHTML=emptyHTML(types.length?'Nothing matches':'No genre match',types.length?'Try loosening a filter or adding a service.':"Those genres don't exist for this type. Try Any instead of All, or another type.");
     }
   }
@@ -462,8 +477,8 @@ function showError(e){
 
 /* ---------- Cards ---------- */
 function badges(k){
-  if(!prov.has(k)) return '<span class="sk"></span>';
-  const o=offers(prov.get(k));
+  if(!info.has(k)) return '<span class="sk"></span>';
+  const o=offers(info.get(k).prov);
   if(!o.length) return `<span class="off">Not on ${st.mine.length?'your services':'streaming'}</span>`;
   return o.slice(0,5).map(p=>`<img src="${IMG}w92${esc(p.logo_path)}" alt="${esc(p.provider_name)}" title="${esc(p.provider_name)}">`).join('');
 }
@@ -471,11 +486,12 @@ function card(it){
   const k=key(it),L=st.list[k]||{};
   return `<article class="card${L.seen?' seen':''}" data-k="${esc(k)}">
 <div class="poster">${it.poster?`<img class="p" loading="lazy" src="${IMG}w342${esc(it.poster)}" alt="">`:`<span class="noimg">${esc(it.title)}</span>`}
-<div class="badges" data-b="${esc(k)}">${badges(k)}</div>
+<div class="certs" data-c="${esc(k)}">${certPill(k)}</div><div class="badges" data-b="${esc(k)}">${badges(k)}</div>
 <div class="acts"><button class="ic bm" data-act="list" data-k="${esc(k)}" aria-pressed="${!!L.list}" aria-label="Watchlist" title="Watchlist">${ICON.bm}</button><button class="ic" data-act="seen" data-k="${esc(k)}" aria-pressed="${!!L.seen}" aria-label="Seen it" title="Seen it">${ICON.ck}</button></div></div>
 <h3>${esc(it.title)}</h3><p class="meta">${esc(it.year||'TBA')}${it.rating?` · ★ ${it.rating.toFixed(1)}`:''}${st.type==='both'||view==='watch'?`<span class="tag">${it.type==='tv'?'Show':'Movie'}</span>`:''}</p></article>`;
 }
-function paintBadges(k){$$(`[data-b="${CSS.escape(k)}"]`).forEach(el=>el.innerHTML=badges(k))}
+const certPill=k=>{const c=info.get(k)?.cert;return c?`<span class="cert" title="Age rating">${esc(c)}</span>`:''};
+function paintInfo(k){const e=CSS.escape(k);$$(`[data-b="${e}"]`).forEach(el=>el.innerHTML=badges(k));$$(`[data-c="${e}"]`).forEach(el=>el.innerHTML=certPill(k))}
 
 function toggle(k,field){
   const it=items.get(k);if(!it) return;
@@ -504,7 +520,7 @@ function renderWatchlist(){
   $('#count').textContent=`${L.length} title${L.length===1?'':'s'}`;
   $('#hint').hidden=true;$('#more').hidden=true;$('#spin').hidden=true;
   $('#grid').innerHTML=L.length?L.map(card).join(''):emptyHTML('Nothing here yet','Tap the bookmark on any title to add it, or the check to mark it seen.');
-  if(meta.genres.movie.length) pool(L.filter(it=>!prov.has(key(it))),6,async it=>{await getProv(it.type,it.id);paintBadges(key(it))});
+  if(meta.genres.movie.length) pool(L.filter(it=>!info.has(key(it))),6,async it=>{await getInfo(it.type,it.id);paintInfo(key(it))});
 }
 
 /* ---------- Detail ---------- */
@@ -513,7 +529,8 @@ async function openDetail(k){
   $('#dbody').innerHTML='<div class="dload">Loading…</div>';
   if(!dl.open) dl.showModal();
   try{
-    const [d,r]=await Promise.all([api(`/${type}/${id}`,{append_to_response:'credits,videos,external_ids'}),getProv(type,id)]);
+    const [d,inf]=await Promise.all([api(`/${type}/${id}`,{append_to_response:'credits,videos,external_ids'}),getInfo(type,id)]);
+    const r=inf.prov;paintInfo(k);
     if(!items.has(k)) items.set(k,norm(type,d));
     const it=items.get(k),L=st.list[k]||{},mv=type==='movie';
     const rt=mv?(d.runtime?`${Math.floor(d.runtime/60)}h ${d.runtime%60}m`:''):[d.number_of_seasons&&`${d.number_of_seasons} season${d.number_of_seasons>1?'s':''}`,d.number_of_episodes&&`${d.number_of_episodes} episodes`,d.status].filter(Boolean).join(' · ');
@@ -524,13 +541,13 @@ async function openDetail(k){
     const cast=(d.credits?.cast||[]).slice(0,10).map(c=>esc(c.name)+(c.character?` <span class="meta">as ${esc(c.character)}</span>`:'')).join(', ');
     $('#dbody').innerHTML=`<div class="dhero"${d.backdrop_path?` style="background-image:url('${IMG}w1280${esc(d.backdrop_path)}')"`:''}><button class="x" data-close aria-label="Close">×</button></div>
 <div class="dmain">${d.poster_path?`<img class="dposter" src="${IMG}w342${esc(d.poster_path)}" alt="">`:'<div class="dposter"></div>'}
-<div><h2>${esc(it.title)}</h2><p class="meta">${[esc(it.year),mv?'Movie':'Series',esc(rt),d.vote_count?`★ ${d.vote_average.toFixed(1)} (${d.vote_count.toLocaleString()} votes)`:''].filter(Boolean).join(' · ')}</p>
+<div><h2>${esc(it.title)}</h2><p class="meta">${[inf.cert?`<span class="cert" title="Age rating">${esc(inf.cert)}</span>`:'',esc(it.year),mv?'Movie':'Series',esc(rt),d.vote_count?`★ ${d.vote_average.toFixed(1)} (${d.vote_count.toLocaleString()} votes)`:''].filter(Boolean).join(' · ')}</p>
 <div class="chips">${(d.genres||[]).map(g=>`<span class="chip">${esc(g.name)}</span>`).join('')}</div>
 <div class="row"><button class="btn" data-act="list" data-k="${esc(k)}" aria-pressed="${!!L.list}">${L.list?'✓ On watchlist':'+ Watchlist'}</button><button class="btn ghost" data-act="seen" data-k="${esc(k)}" aria-pressed="${!!L.seen}">${L.seen?'✓ Seen':'Mark as seen'}</button></div></div></div>
 <div class="dsec">${d.tagline?`<p class="tagline">${esc(d.tagline)}</p>`:''}<p>${esc(d.overview||'No overview yet.')}</p>${who.length?`<p class="meta">${mv?'Directed by':'Created by'} ${esc(who.join(', '))}</p>`:''}</div>
 <div class="dsec"><h3>Where to watch in ${esc(reg)}</h3>${groups||'<p class="meta">Not available to stream, rent or buy here right now.</p>'}</div>
 ${cast?`<div class="dsec"><h3>Cast</h3><p>${cast}</p></div>`:''}
-<div class="dsec links">${r?.link?`<a href="${esc(r.link)}" target="_blank" rel="noopener">All watch options</a>`:''}${tr?`<a href="https://www.youtube.com/watch?v=${encodeURIComponent(tr.key)}" target="_blank" rel="noopener">Trailer</a>`:''}${d.external_ids?.imdb_id?`<a href="https://www.imdb.com/title/${encodeURIComponent(d.external_ids.imdb_id)}/" target="_blank" rel="noopener">IMDb</a>`:''}<a href="https://www.themoviedb.org/${type}/${encodeURIComponent(id)}" target="_blank" rel="noopener">TMDB</a></div>`;
+<div class="dsec links">${d.external_ids?.imdb_id?`<a href="https://www.imdb.com/title/${encodeURIComponent(d.external_ids.imdb_id)}/parentalguide" target="_blank" rel="noopener">Parents Guide</a>`:''}${r?.link?`<a href="${esc(r.link)}" target="_blank" rel="noopener">All watch options</a>`:''}${tr?`<a href="https://www.youtube.com/watch?v=${encodeURIComponent(tr.key)}" target="_blank" rel="noopener">Trailer</a>`:''}${d.external_ids?.imdb_id?`<a href="https://www.imdb.com/title/${encodeURIComponent(d.external_ids.imdb_id)}/" target="_blank" rel="noopener">IMDb</a>`:''}<a href="https://www.themoviedb.org/${type}/${encodeURIComponent(id)}" target="_blank" rel="noopener">TMDB</a></div>`;
   }catch(e){$('#dbody').innerHTML=`<div class="dload">${esc(errText(e))}<br><br><button class="btn ghost" data-close>Close</button></div>`}
 }
 
@@ -578,6 +595,12 @@ function renderFilterOptions(){
 function renderGenres(){
   $('#genres').innerHTML=meta.genres.movie.length?genreNames().map(n=>`<button class="chip" data-g="${esc(n)}" aria-pressed="${st.f.genres.includes(n)}">${esc(n)}</button>`).join(''):'';
 }
+function renderCerts(){
+  const types=st.type==='both'?['movie','tv']:[st.type];
+  const rows=types.map(t=>{const L=certList(t);if(!L.length)return '';
+    return `<div class="crow">${types.length>1?`<span>${t==='movie'?'Movies':'Shows'}</span>`:''}<div class="chips">${L.map(c=>`<button class="chip" data-cert="${t}|${esc(c.certification)}" title="${esc(c.meaning)}" aria-pressed="${st.f.certs[t].includes(c.certification)}">${esc(c.certification)}</button>`).join('')}</div></div>`}).join('');
+  $('#certs').innerHTML=rows||'<span class="meta">No age ratings listed for this country.</span>';
+}
 function renderPresets(){
   $('#presets').innerHTML=st.presets.length?st.presets.map((p,i)=>`<span class="chip pchip"><button data-preset="${i}">${esc(p.name)}</button><button data-pdel="${i}" aria-label="Delete ${esc(p.name)}">×</button></span>`).join(''):'<span class="meta">Save a filter combo to reuse it in one tap.</span>';
 }
@@ -589,7 +612,7 @@ function syncControls(){
   $$('[data-m]').forEach(c=>c.checked=f.mono.includes(c.dataset.m));
   $$('#types [data-t]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.t===st.type));
   $$('#gmode [data-gm]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.gm===f.gmode));
-  renderGenres();renderPresets();
+  renderGenres();renderCerts();renderPresets();
 }
 function readControls(){
   const f=st.f,yr=v=>/^\d{4}$/.test(v.trim())?v.trim():'';
@@ -623,18 +646,20 @@ document.addEventListener('click',async e=>{
   const c=t.closest('.card');if(c){openDetail(c.dataset.k);return}
   const g=t.closest('[data-g]');
   if(g){const n=g.dataset.g,G=st.f.genres;st.f.genres=G.includes(n)?G.filter(x=>x!==n):[...G,n];g.setAttribute('aria-pressed',st.f.genres.includes(n));later(250);return}
+  const ce=t.closest('[data-cert]');
+  if(ce){const [ty,c]=ce.dataset.cert.split(/\|(.*)/s),cur=st.f.certs[ty];st.f.certs={...st.f.certs,[ty]:cur.includes(c)?cur.filter(x=>x!==c):[...cur,c]};ce.setAttribute('aria-pressed',st.f.certs[ty].includes(c));later(250);return}
   const gm=t.closest('[data-gm]');if(gm){st.f.gmode=gm.dataset.gm;syncControls();later(0);return}
   const ty=t.closest('[data-t]');if(ty){st.type=ty.dataset.t;remapGenres();syncControls();later(0);return}
   const w=t.closest('[data-w]');if(w){wlMode=w.dataset.w;$$('#wlmode [data-w]').forEach(b=>b.setAttribute('aria-pressed',b===w));renderWatchlist();return}
   const tab=t.closest('[data-view]');if(tab){setView(tab.dataset.view);return}
-  const pr=t.closest('[data-preset]');if(pr){const p=st.presets[+pr.dataset.preset];st.f={...DEF_F,...p.f};st.type=p.type;remapGenres();syncControls();later(0);document.body.classList.remove('fopen');return}
+  const pr=t.closest('[data-preset]');if(pr){const p=st.presets[+pr.dataset.preset];st.f={...DEF_F,...JSON.parse(JSON.stringify(p.f))};if(!st.f.certs)st.f.certs={movie:[],tv:[]};st.type=p.type;remapGenres();syncControls();later(0);document.body.classList.remove('fopen');return}
   const pd=t.closest('[data-pdel]');if(pd){st.presets.splice(+pd.dataset.pdel,1);save();renderPresets();return}
   const pp=t.closest('[data-p]');
   if(pp){const id=+pp.dataset.p;st.mine=st.mine.includes(id)?st.mine.filter(x=>x!==id):[...st.mine,id];save();dirty=true;pp.setAttribute('aria-pressed',st.mine.includes(id));$('#pcount').textContent=st.mine.length?`· ${st.mine.length} picked`:'';renderMineBtn();return}
 });
 $('#psave').addEventListener('click',()=>{
   const name=$('#pname').value.trim()||`Search ${st.presets.length+1}`;
-  st.presets.push({name,type:st.type,f:{...st.f,genres:[...st.f.genres],mono:[...st.f.mono]}});
+  st.presets.push({name,type:st.type,f:JSON.parse(JSON.stringify(st.f))});
   $('#pname').value='';save();renderPresets();
 });
 $('#pname').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#psave').click()}});
@@ -650,7 +675,7 @@ $('#keyshow').addEventListener('click',()=>{const k=$('#key');k.type=k.type==='p
 async function saveKey(){
   const v=$('#key').value.trim();
   if(!v){$('#keymsg').textContent='Paste a key first.';$('#keymsg').className='msg bad';return}
-  st.key=v;cache.clear();prov.clear();save();
+  st.key=v;cache.clear();info.clear();save();
   $('#keymsg').textContent='Connecting…';$('#keymsg').className='msg';
   try{await loadMeta();renderFilterOptions();syncControls();renderMineBtn();wlCount();renderSettings();dirty=true;
     $('#keymsg').textContent=st.mine.length?'Connected.':'Connected. Now pick your services below.';}
@@ -663,7 +688,7 @@ $('#pq').addEventListener('input',renderProvGrid);
 $('#pall').addEventListener('click',()=>{showAllProv=true;renderProvGrid()});
 $('#pclear').addEventListener('click',()=>{st.mine=[];save();dirty=true;renderProvGrid();renderMineBtn()});
 $('#region').addEventListener('change',async()=>{
-  st.region=$('#region').value;prov.clear();save();dirty=true;
+  st.region=$('#region').value;info.clear();st.f.certs={movie:[],tv:[]};save();dirty=true;renderCerts();
   try{await loadProviders();renderProvGrid();renderMineBtn()}catch(e){$('#keymsg').textContent=errText(e);$('#keymsg').className='msg bad'}
 });
 $('#settings').addEventListener('close',()=>{if(dirty&&meta.genres.movie.length){dirty=false;refresh()}});
