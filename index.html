@@ -344,7 +344,7 @@ async function getInfo(type,id){
   const k=type+':'+id;
   if(info.has(k)) return info.get(k);
   const d=await api(`/${type}/${id}`,{append_to_response:type==='movie'?'watch/providers,release_dates':'watch/providers,content_ratings'});
-  const v={prov:d['watch/providers']?.results?.[st.region]||null,cert:certOf(type,d)};
+  const v={prov:d['watch/providers']?.results?.[st.region]||null,cert:certOf(type,d)||'NR'};
   info.set(k,v);return v;
 }
 function certOf(type,d){
@@ -354,7 +354,8 @@ function certOf(type,d){
 }
 function certList(type){
   const seen=new Set();
-  return (meta.certs[type][st.region]||[]).slice().sort((a,b)=>a.order-b.order).filter(c=>c.certification&&!seen.has(c.certification)&&seen.add(c.certification));
+  const L=(meta.certs[type][st.region]||[]).slice().sort((a,b)=>a.order-b.order).filter(c=>c.certification&&!seen.has(c.certification)&&seen.add(c.certification));
+  return L.length&&!seen.has('NR')?[{certification:'NR',meaning:'Not rated, or no rating listed',order:-1},...L]:L;
 }
 /* Adult-only movie ratings are never shown: NC-17 in the US, and the top movie rating in other countries (18, R18 and the like). */
 function blockedCerts(){
@@ -406,7 +407,8 @@ function params(type,page){
   const p={page,sort_by:sm[f.sort],watch_region:st.region,include_adult:false,'vote_count.gte':f.minVotes||'','vote_average.gte':f.minRating||'',with_original_language:f.lang,'with_runtime.lte':f.maxRuntime};
   if(st.mine.length) p.with_watch_providers=st.mine.join('|');
   if(f.mono.length) p.with_watch_monetization_types=f.mono.join('|');
-  if(mv&&f.certs.movie.length){p.certification_country=st.region;p.certification=f.certs.movie.join('|')}
+  /* Only a hint to narrow TMDB's candidates; the app's own per-title check decides. TMDB's NR excludes titles with no rating, so skip the hint then. */
+  if(mv&&f.certs.movie.length&&!f.certs.movie.includes('NR')){p.certification_country=st.region;p.certification=f.certs.movie.join('|')}
   const g=resolve(type,f.genres);
   if(g.ids.length) p.with_genres=g.ids.join(f.gmode==='all'?',':'|');
   if(f.yFrom) p[d+'.gte']=f.yFrom+'-01-01';
@@ -496,7 +498,7 @@ function card(it){
 <div class="acts"><button class="ic bm" data-act="list" data-k="${esc(k)}" aria-pressed="${!!L.list}" aria-label="Watchlist" title="Watchlist">${ICON.bm}</button><button class="ic" data-act="seen" data-k="${esc(k)}" aria-pressed="${!!L.seen}" aria-label="Seen it" title="Seen it">${ICON.ck}</button></div></div>
 <h3>${esc(it.title)}</h3><p class="meta">${esc(it.year||'TBA')}${it.rating?` · ★ ${it.rating.toFixed(1)}`:''}${st.type==='both'||view==='watch'?`<span class="tag">${it.type==='tv'?'Show':'Movie'}</span>`:''}</p></article>`;
 }
-const certPill=k=>{const c=info.get(k)?.cert;return c?`<span class="cert" title="Age rating">${esc(c)}</span>`:''};
+const certPill=k=>{const c=info.get(k)?.cert;return c?`<span class="cert" title="${c==='NR'?'Not rated':'Age rating'}">${esc(c)}</span>`:''};
 function paintInfo(k){const e=CSS.escape(k);$$(`[data-b="${e}"]`).forEach(el=>el.innerHTML=badges(k));$$(`[data-c="${e}"]`).forEach(el=>el.innerHTML=certPill(k))}
 
 function toggle(k,field){
