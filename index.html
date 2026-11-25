@@ -422,7 +422,7 @@ function params(type,page){
   if(f.yTo) p[d+'.lte']=f.yTo+'-12-31'; else if(f.sort==='new') p[d+'.lte']=TODAY;
   return p;
 }
-function clientMatch(it){
+function clientMatch(it,skipLang){
   const f=st.f;
   if(f.genres.length){
     const ids=resolve(it.type,f.genres).ids;
@@ -431,7 +431,7 @@ function clientMatch(it){
   if(f.yFrom&&(!it.year||it.year<f.yFrom)) return false;
   if(f.yTo&&(!it.year||it.year>f.yTo)) return false;
   if(f.minRating&&it.rating<f.minRating) return false;
-  if(f.lang&&it.lang!==f.lang) return false;
+  if(!skipLang&&f.lang&&it.lang!==f.lang) return false;
   return true;
 }
 const cmp={pop:(a,b)=>b.pop-a.pop,rating:(a,b)=>b.rating-a.rating,new:(a,b)=>b.date.localeCompare(a.date),az:(a,b)=>a.title.localeCompare(b.title)};
@@ -642,7 +642,40 @@ function readControls(){
 }
 let deb;
 function later(ms){clearTimeout(deb);deb=setTimeout(()=>{save();refresh()},ms)}
-function refresh(){view==='browse'?browse(true):renderWatchlist()}
+function refresh(){if(view==='browse'){browse(true);facets()}else renderWatchlist()}
+
+/* Dynamic country and language options. TMDB has no facet counts, so sample the top titles that match every filter
+   except country and language, verify them like any result, and list only the countries and languages they contain.
+   Each list honours the other's current choice; the current pick always stays listed. */
+let ftoken=0;
+async function facets(){
+  if(!meta.genres.movie.length) return;
+  const my=++ftoken,f=st.f,q=f.q.trim(),types=activeTypes(),PAGES=2;
+  try{
+    const lists=await Promise.all(types.flatMap(t=>Array.from({length:PAGES},(_,i)=>{
+      if(q) return api(`/search/${t}`,{query:q,page:i+1,include_adult:false}).then(d=>d.results.map(r=>norm(t,r)));
+      const p=params(t,i+1);delete p.with_origin_country;delete p.with_original_language;
+      return api(`/discover/${t}`,p).then(d=>d.results.map(r=>norm(t,r)));
+    })));
+    if(my!==ftoken) return;
+    const seen=new Set(),c=lists.flat().filter(it=>!seen.has(key(it))&&seen.add(key(it))&&(!q||clientMatch(it,true)));
+    await pool(c,10,it=>getInfo(it.type,it.id));
+    if(my!==ftoken) return;
+    const ok=c.filter(it=>offers(info.get(key(it))?.prov).length&&certOk(it));
+    const countries=new Set(),langs=new Set();
+    for(const it of ok){
+      if(!f.lang||it.lang===f.lang) (info.get(key(it))?.origin||[]).forEach(x=>countries.add(x));
+      if(originOk(it)) langs.add(it.lang);
+    }
+    fillSelect('#origin','Any country',meta.countries.filter(x=>countries.has(x.iso_3166_1)||x.iso_3166_1===f.origin).map(x=>[x.iso_3166_1,x.english_name]),f.origin);
+    fillSelect('#lang','Any language',meta.langs.filter(x=>langs.has(x.iso_639_1)||x.iso_639_1===f.lang).map(x=>[x.iso_639_1,x.english_name]),f.lang);
+  }catch(e){}
+}
+function fillSelect(sel,anyLabel,opts,val){
+  const el=$(sel);
+  el.innerHTML=`<option value="">${anyLabel}</option>`+opts.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join('');
+  el.value=val;
+}
 function setView(v){
   view=v;
   $$('.tab').forEach(t=>t.setAttribute('aria-selected',t.dataset.view===v));
