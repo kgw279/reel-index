@@ -196,6 +196,10 @@ dialog::backdrop{background:#0009;backdrop-filter:blur(3px)}
   <aside id="filters" aria-label="Filters">
     <div class="fhead"><h2>Filters</h2><div class="row"><button class="link" id="freset">Reset</button><button class="x" id="fclose" aria-label="Close filters">×</button></div></div>
     <div class="fs">
+      <h4>Services</h4>
+      <div class="svcs" id="fsvcs"></div>
+    </div>
+    <div class="fs">
       <h4>Saved searches</h4>
       <div class="chips" id="presets"></div>
       <div class="row" style="margin-top:8px"><input id="pname" class="inp grow" placeholder="Name this search" maxlength="40"><button id="psave" class="btn sm">Save</button></div>
@@ -252,7 +256,7 @@ dialog::backdrop{background:#0009;backdrop-filter:blur(3px)}
     <div class="svcs" id="svcs" aria-label="Services to search"></div>
     <div class="bar" id="bbar">
       <label class="q"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="q" class="inp" type="search" placeholder="Search titles, people, keywords, studios, franchises, genres…" autocomplete="off"></label>
-      <div class="seg" id="types"><button data-t="movie" aria-pressed="true">Movies</button><button data-t="tv" aria-pressed="false">Shows</button><button data-t="both" aria-pressed="false">Both</button></div>
+      <div class="seg" id="types"><button data-t="both" aria-pressed="true">Both</button><button data-t="movie" aria-pressed="false">Movies</button><button data-t="tv" aria-pressed="false">Shows</button></div>
       <select id="sort" aria-label="Sort"></select>
       <button class="btn ghost" id="fbtn" aria-label="Open filters">Filters<b id="fcount" hidden></b></button>
     </div>
@@ -317,8 +321,10 @@ const TV_ONLY=['Kids','News','Reality','Soap','Talk'];
 const DEF_F={q:'',genres:[],gmode:'any',yFrom:'',yTo:'',minRating:0,minVotes:50,maxRuntime:'',lang:'',mono:['flatrate','free','ads'],sort:'pop',hideSeen:false,certs:{movie:[],tv:[]},origin:'US',kw:[],kwmode:'any',svcOff:[]};
 const ICON={bm:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M6 3h12v18l-6-4.5L6 21z"/></svg>',ck:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5L20 7"/></svg>'};
 
-let st={key:'',region:'US',mine:[],type:'movie',f:{...DEF_F},list:{},presets:[]};
+let st={key:'',region:'US',mine:[],type:'both',f:{...DEF_F},list:{},presets:[]};
 try{const s=JSON.parse(localStorage.getItem(LS)||'null');if(s)st={...st,...s,f:{...DEF_F,...(s.f||{})}}}catch(e){}
+/* The app always opens on Both; saved searches and shared setups can still pick a type. */
+st.type='both';
 if(!Array.isArray(st.f.kw))st.f.kw=[];
 if(!Array.isArray(st.f.svcOff))st.f.svcOff=[];
 if(!st.f.certs||!Array.isArray(st.f.certs.movie)||!Array.isArray(st.f.certs.tv))st.f.certs={movie:[],tv:[]};
@@ -397,11 +403,11 @@ function certList(type){
   const L=(meta.certs[type][st.region]||[]).slice().sort((a,b)=>a.order-b.order).filter(c=>c.certification&&!seen.has(c.certification)&&seen.add(c.certification));
   return L.length&&!seen.has('NR')?[{certification:'NR',meaning:'Not rated, or no rating listed',order:-1},...L]:L;
 }
-/* Ratings that are never shown. Movies: NR/unrated, R and NC-17 in the US. Shows: TV-MA in the US.
+/* Ratings that are never shown. Movies: NR/unrated, R and NC-17 in the US. Shows: NR/unrated and TV-MA in the US.
    Elsewhere, the country's top rating for that type (18, R18 and the like). */
 function blockedCerts(type){
   const L=certList(type),top=L.length>1?L[L.length-1].certification:'',us=st.region==='US';
-  return new Set((type==='movie'?['NR','NC-17',us?'R':'',top]:[us?'TV-MA':'',top]).filter(Boolean));
+  return new Set((type==='movie'?['NR','NC-17',us?'R':'',top]:['NR',us?'TV-MA':'',top]).filter(Boolean));
 }
 /* Keywords: excluded ones must be absent; included ones must match any or all, per the toggle. */
 const kwOk=it=>{
@@ -709,7 +715,7 @@ function readShared(){
   try{const d=b64d(m[1]);return d&&d.v===1&&typeof d.key==='string'?d:null}catch(e){return null}
 }
 function applyShared(d){
-  st={...st,key:d.key,region:d.region||'US',mine:Array.isArray(d.mine)?d.mine:[],type:['movie','tv','both'].includes(d.type)?d.type:'movie',f:{...DEF_F,...(d.f||{})},presets:Array.isArray(d.presets)?d.presets:st.presets};
+  st={...st,key:d.key,region:d.region||'US',mine:Array.isArray(d.mine)?d.mine:[],type:['movie','tv','both'].includes(d.type)?d.type:'both',f:{...DEF_F,...(d.f||{})},presets:Array.isArray(d.presets)?d.presets:st.presets};
   if(!st.f.certs||!Array.isArray(st.f.certs.movie)||!Array.isArray(st.f.certs.tv))st.f.certs={movie:[],tv:[]};
   ['kw','svcOff','genres','mono'].forEach(k=>{if(!Array.isArray(st.f[k]))st.f[k]=[...DEF_F[k]]});
   cache.clear();info.clear();save();
@@ -721,12 +727,15 @@ function showBanner(html){const b=$('#banner');b.innerHTML=html;b.hidden=!html}
 function renderSvcs(){
   st.f.svcOff=st.f.svcOff.filter(id=>st.mine.includes(id));
   const ps=st.mine.map(id=>meta.pmap.get(id)).filter(Boolean);
-  $('#svcs').innerHTML=ps.length?`<span class="lbl">Searching</span>`+ps.map(p=>{const on=!st.f.svcOff.includes(p.provider_id);return `<button class="svc" data-svc="${p.provider_id}" aria-pressed="${on}" title="${esc(p.provider_name)}${on?'':' (off)'}" aria-label="${esc(p.provider_name)}"><img src="${IMG}w92${esc(p.logo_path)}" alt=""></button>`}).join('')+'<button class="link" data-open-settings>Edit services</button>':'';
+  /* One toggle component, rendered above the search bar and in the Filters menu; both stay in sync. */
+  const toggles=ps.map(p=>{const on=!st.f.svcOff.includes(p.provider_id);return `<button class="svc" data-svc="${p.provider_id}" aria-pressed="${on}" title="${esc(p.provider_name)}${on?'':' (off)'}" aria-label="${esc(p.provider_name)}"><img src="${IMG}w92${esc(p.logo_path)}" alt=""></button>`}).join('');
+  $('#svcs').innerHTML=ps.length?`<span class="lbl">Searching</span>${toggles}<button class="link" data-open-settings>Edit services</button>`:'';
+  $('#fsvcs').innerHTML=ps.length?`${toggles}<button class="link" data-open-settings>Edit services</button>`:'<button class="link" data-open-settings>Pick your services</button>';
 }
 /* Number of filter groups changed from their defaults, shown on the Filters button. */
 function updateFCount(){
   const f=st.f,d=DEF_F;
-  const n=[f.genres.length,f.kw.length,f.certs.movie.length+f.certs.tv.length,[...f.mono].sort().join()!==[...d.mono].sort().join(),f.yFrom||f.yTo,f.minRating,f.minVotes!==d.minVotes,f.maxRuntime,f.lang,f.origin!==d.origin,f.hideSeen].filter(Boolean).length;
+  const n=[f.svcOff.length,f.genres.length,f.kw.length,f.certs.movie.length+f.certs.tv.length,[...f.mono].sort().join()!==[...d.mono].sort().join(),f.yFrom||f.yTo,f.minRating,f.minVotes!==d.minVotes,f.maxRuntime,f.lang,f.origin!==d.origin,f.hideSeen].filter(Boolean).length;
   $('#fcount').textContent=n;$('#fcount').hidden=!n;
 }
 function renderProvGrid(){
