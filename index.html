@@ -356,7 +356,16 @@ function certList(type){
   const seen=new Set();
   return (meta.certs[type][st.region]||[]).slice().sort((a,b)=>a.order-b.order).filter(c=>c.certification&&!seen.has(c.certification)&&seen.add(c.certification));
 }
-const certOk=it=>{const sel=st.f.certs[it.type];return !sel.length||sel.includes(info.get(key(it))?.cert)};
+/* Adult-only movie ratings are never shown: NC-17 in the US, and the top movie rating in other countries (18, R18 and the like). */
+function blockedCerts(){
+  const L=certList('movie'),top=L.length>1?L[L.length-1].certification:'';
+  return new Set(['NC-17',top].filter(Boolean));
+}
+const certOk=it=>{
+  const c=info.get(key(it))?.cert,sel=st.f.certs[it.type];
+  if(it.type==='movie'&&c&&blockedCerts().has(c)) return false;
+  return !sel.length||sel.includes(c);
+};
 function offers(r){
   if(!r) return [];
   const out=new Map(),mono=st.f.mono.length?st.f.mono:MONO.map(m=>m[0]);
@@ -594,7 +603,8 @@ function renderGenres(){
 }
 function renderCerts(){
   const types=st.type==='both'?['movie','tv']:[st.type];
-  const rows=types.map(t=>{const L=certList(t);if(!L.length)return '';
+  const bl=blockedCerts();
+  const rows=types.map(t=>{const L=certList(t).filter(c=>t!=='movie'||!bl.has(c.certification));if(!L.length)return '';
     return `<div class="crow">${types.length>1?`<span>${t==='movie'?'Movies':'Shows'}</span>`:''}<div class="chips">${L.map(c=>`<button class="chip" data-cert="${t}|${esc(c.certification)}" title="${esc(c.meaning)}" aria-pressed="${st.f.certs[t].includes(c.certification)}">${esc(c.certification)}</button>`).join('')}</div></div>`}).join('');
   $('#certs').innerHTML=rows||'<span class="meta">No age ratings listed for this country.</span>';
 }
