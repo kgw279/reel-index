@@ -46,6 +46,13 @@ a{color:inherit}
 .chip{border:1px solid var(--line);background:var(--panel);padding:5px 11px;border-radius:999px;font-size:14px;min-height:34px}
 .chip[aria-pressed=true]{background:var(--acc);border-color:var(--acc);color:#fff}
 .pchip{display:inline-flex;padding:0;overflow:hidden}
+.pchip.on{background:var(--acc);border-color:var(--acc);color:#fff}.pchip.on button+button{color:#fff;opacity:.8}
+.pchip.out{border-style:dashed}.pchip.out button:first-child{color:var(--mute)}
+.kwbox{position:relative;margin-bottom:8px}
+.sugg{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:5;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 30px -12px #0008;overflow:hidden}
+.sugg button{display:block;width:100%;text-align:left;border:0;background:none;padding:10px 12px;font-size:15px;min-height:42px}
+.sugg button:hover,.sugg button:focus-visible{background:var(--chip)}
+.kwhint{font-size:12px;color:var(--mute);margin:6px 0 0}
 .pchip button{border:0;background:none;padding:5px 4px 5px 11px;font-size:14px}
 .pchip button+button{padding:5px 10px 5px 6px;color:var(--mute)}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -191,6 +198,12 @@ dialog::backdrop{background:#0009;backdrop-filter:blur(3px)}
       <div class="chips" id="genres"></div>
     </div>
     <div class="fs">
+      <h4>Keywords <span class="seg" id="kwmode"><button data-km="any" aria-pressed="true">Any</button><button data-km="all" aria-pressed="false">All</button></span></h4>
+      <div class="kwbox"><input id="kwq" class="inp" placeholder="Add a keyword: anime, isekai…" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="sugg"><div class="sugg" id="sugg" hidden></div></div>
+      <div class="chips" id="kws"></div>
+      <p class="kwhint">Tap a keyword to switch between include and exclude.</p>
+    </div>
+    <div class="fs">
       <h4>Age rating</h4>
       <div id="certs"></div>
     </div>
@@ -285,11 +298,12 @@ const MONO_SHORT={flatrate:'Stream',free:'Free',ads:'With ads',rent:'Rent',buy:'
 const SORTS=[['pop','Most popular'],['rating','Top rated'],['new','Newest'],['az','Title A–Z']];
 const ALIAS={'Action':'Action & Adventure','Adventure':'Action & Adventure','Science Fiction':'Sci-Fi & Fantasy','Fantasy':'Sci-Fi & Fantasy','War':'War & Politics','Action & Adventure':['Action','Adventure'],'Sci-Fi & Fantasy':['Science Fiction','Fantasy'],'War & Politics':['War']};
 const TV_ONLY=['Kids','News','Reality','Soap','Talk'];
-const DEF_F={q:'',genres:[],gmode:'any',yFrom:'',yTo:'',minRating:0,minVotes:50,maxRuntime:'',lang:'',mono:['flatrate','free','ads'],sort:'pop',hideSeen:false,certs:{movie:[],tv:[]},origin:'US'};
+const DEF_F={q:'',genres:[],gmode:'any',yFrom:'',yTo:'',minRating:0,minVotes:50,maxRuntime:'',lang:'',mono:['flatrate','free','ads'],sort:'pop',hideSeen:false,certs:{movie:[],tv:[]},origin:'US',kw:[],kwmode:'any'};
 const ICON={bm:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M6 3h12v18l-6-4.5L6 21z"/></svg>',ck:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5L20 7"/></svg>'};
 
 let st={key:'',region:'US',mine:[],type:'movie',f:{...DEF_F},list:{},presets:[]};
 try{const s=JSON.parse(localStorage.getItem(LS)||'null');if(s)st={...st,...s,f:{...DEF_F,...(s.f||{})}}}catch(e){}
+if(!Array.isArray(st.f.kw))st.f.kw=[];
 if(!st.f.certs||!Array.isArray(st.f.certs.movie)||!Array.isArray(st.f.certs.tv))st.f.certs={movie:[],tv:[]};
 const save=()=>{try{localStorage.setItem(LS,JSON.stringify(st))}catch(e){}};
 
@@ -348,8 +362,8 @@ async function loadMeta(){
 async function getInfo(type,id){
   const k=type+':'+id;
   if(info.has(k)) return info.get(k);
-  const d=await api(`/${type}/${id}`,{append_to_response:type==='movie'?'watch/providers,release_dates':'watch/providers,content_ratings'});
-  const v={prov:d['watch/providers']?.results?.[st.region]||null,cert:certOf(type,d)||'NR',origin:d.origin_country?.length?d.origin_country:(d.production_countries||[]).map(c=>c.iso_3166_1)};
+  const d=await api(`/${type}/${id}`,{append_to_response:type==='movie'?'watch/providers,release_dates,keywords':'watch/providers,content_ratings,keywords'});
+  const v={prov:d['watch/providers']?.results?.[st.region]||null,cert:certOf(type,d)||'NR',kw:(d.keywords?.keywords||d.keywords?.results||[]).map(k=>k.id),origin:d.origin_country?.length?d.origin_country:(d.production_countries||[]).map(c=>c.iso_3166_1)};
   info.set(k,v);return v;
 }
 function certOf(type,d){
@@ -368,6 +382,13 @@ function blockedCerts(){
   return new Set(['NR','NC-17',st.region==='US'?'R':'',top].filter(Boolean));
 }
 /* Country of origin: a co-production counts if any of its origin countries matches. */
+/* Keywords: excluded ones must be absent; included ones must match any or all, per the toggle. */
+const kwOk=it=>{
+  const ids=info.get(key(it))?.kw||[],inc=st.f.kw.filter(k=>!k.out),out=st.f.kw.filter(k=>k.out);
+  if(out.some(k=>ids.includes(k.id))) return false;
+  return !inc.length||(st.f.kwmode==='all'?inc.every(k=>ids.includes(k.id)):inc.some(k=>ids.includes(k.id)));
+};
+const baseOk=it=>offers(info.get(key(it))?.prov).length&&certOk(it)&&kwOk(it);
 const originOk=it=>!st.f.origin||(info.get(key(it))?.origin||[]).includes(st.f.origin);
 const certOk=it=>{
   const c=info.get(key(it))?.cert,sel=st.f.certs[it.type];
@@ -416,6 +437,9 @@ function params(type,page){
   if(f.mono.length) p.with_watch_monetization_types=f.mono.join('|');
   /* Only a hint to narrow TMDB's candidates; the app's own per-title check decides. TMDB's NR excludes titles with no rating, so skip the hint then. */
   if(mv&&f.certs.movie.length&&!f.certs.movie.includes('NR')){p.certification_country=st.region;p.certification=f.certs.movie.join('|')}
+  const inc=f.kw.filter(k=>!k.out),out=f.kw.filter(k=>k.out);
+  if(inc.length) p.with_keywords=inc.map(k=>k.id).join(f.kwmode==='all'?',':'|');
+  if(out.length) p.without_keywords=out.map(k=>k.id).join(',');
   const g=resolve(type,f.genres);
   if(g.ids.length) p.with_genres=g.ids.join(f.gmode==='all'?',':'|');
   if(f.yFrom) p[d+'.gte']=f.yFrom+'-01-01';
@@ -465,7 +489,7 @@ async function browse(reset){
       let c=got.flat().filter(it=>!B.keys.has(key(it))&&(!q||clientMatch(it)));
       await pool(c,10,it=>getInfo(it.type,it.id));
       if(my!==token) return;
-      c=c.filter(it=>offers(info.get(key(it))?.prov).length&&certOk(it)&&originOk(it));
+      c=c.filter(it=>baseOk(it)&&originOk(it));
       if(types.length>1&&!q) c.sort(cmp[f.sort]);
       fresh.push(...c);
       B.more=types.some(hasMore);
@@ -618,6 +642,20 @@ function renderCerts(){
     return `<div class="crow">${types.length>1?`<span>${t==='movie'?'Movies':'Shows'}</span>`:''}<div class="chips">${L.map(c=>`<button class="chip" data-cert="${t}|${esc(c.certification)}" title="${esc(c.meaning)}" aria-pressed="${st.f.certs[t].includes(c.certification)}">${esc(c.certification)}</button>`).join('')}</div></div>`}).join('');
   $('#certs').innerHTML=rows||'<span class="meta">No age ratings listed for this country.</span>';
 }
+function renderKw(){
+  $('#kws').innerHTML=st.f.kw.map(k=>`<span class="chip pchip ${k.out?'out':'on'}"><button data-kwt="${k.id}" aria-label="${k.out?'Excluding':'Including'} ${esc(k.name)}, tap to switch">${k.out?'Not ':''}${esc(k.name)}</button><button data-kwdel="${k.id}" aria-label="Remove ${esc(k.name)}">×</button></span>`).join('');
+  $$('#kwmode [data-km]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.km===st.f.kwmode));
+}
+let ktoken=0,kdeb,sugg=[];
+function showSugg(list){
+  sugg=list;const el=$('#sugg');
+  el.innerHTML=list.map((k,i)=>`<button type="button" data-kwadd="${i}">${esc(k.name)}</button>`).join('');
+  el.hidden=!list.length;$('#kwq').setAttribute('aria-expanded',!!list.length);
+}
+function addKw(k){
+  if(!st.f.kw.some(x=>x.id===k.id)) st.f.kw=[...st.f.kw,{id:k.id,name:k.name,out:false}];
+  $('#kwq').value='';showSugg([]);renderKw();later(0);
+}
 function renderPresets(){
   $('#presets').innerHTML=st.presets.length?st.presets.map((p,i)=>`<span class="chip pchip"><button data-preset="${i}">${esc(p.name)}</button><button data-pdel="${i}" aria-label="Delete ${esc(p.name)}">×</button></span>`).join(''):'<span class="meta">Save a filter combo to reuse it in one tap.</span>';
 }
@@ -631,7 +669,7 @@ function syncControls(){
   $$('[data-m]').forEach(c=>c.checked=f.mono.includes(c.dataset.m));
   $$('#types [data-t]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.t===st.type));
   $$('#gmode [data-gm]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.gm===f.gmode));
-  renderGenres();renderCerts();renderPresets();
+  renderGenres();renderKw();renderCerts();renderPresets();
 }
 function readControls(){
   const f=st.f,yr=v=>/^\d{4}$/.test(v.trim())?v.trim():'';
@@ -661,7 +699,7 @@ async function facets(){
     const seen=new Set(),c=lists.flat().filter(it=>!seen.has(key(it))&&seen.add(key(it))&&(!q||clientMatch(it,true)));
     await pool(c,10,it=>getInfo(it.type,it.id));
     if(my!==ftoken) return;
-    const ok=c.filter(it=>offers(info.get(key(it))?.prov).length&&certOk(it));
+    const ok=c.filter(baseOk);
     const countries=new Set(),langs=new Set();
     for(const it of ok){
       if(!f.lang||it.lang===f.lang) (info.get(key(it))?.origin||[]).forEach(x=>countries.add(x));
@@ -685,7 +723,22 @@ function setView(v){
 }
 
 /* ---------- Events ---------- */
-$('#filters').addEventListener('input',e=>{if(e.target.matches('input,select')&&e.target.id!=='pname'){readControls();later(e.target.type==='range'?350:250)}});
+$('#kwq').addEventListener('input',()=>{
+  clearTimeout(kdeb);const q=$('#kwq').value.trim(),my=++ktoken;
+  if(q.length<2){showSugg([]);return}
+  kdeb=setTimeout(async()=>{try{const d=await api('/search/keyword',{query:q});if(my===ktoken)showSugg(d.results.filter(k=>!st.f.kw.some(x=>x.id===k.id)).slice(0,8))}catch(e){}},250);
+});
+$('#kwq').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){e.preventDefault();if(sugg.length)addKw(sugg[0])}
+  else if(e.key==='Escape') showSugg([]);
+  else if(e.key==='ArrowDown'&&sugg.length){e.preventDefault();$('#sugg button').focus()}
+});
+$('#sugg').addEventListener('keydown',e=>{
+  const b=e.target.closest('button');if(!b) return;
+  if(e.key==='ArrowDown'){e.preventDefault();(b.nextElementSibling||b).focus()}
+  if(e.key==='ArrowUp'){e.preventDefault();(b.previousElementSibling||$('#kwq')).focus()}
+});
+$('#filters').addEventListener('input',e=>{if(e.target.matches('input,select')&&e.target.id!=='pname'&&e.target.id!=='kwq'){readControls();later(e.target.type==='range'?350:250)}});
 $('#q').addEventListener('input',()=>{readControls();later(400)});
 $('#sort').addEventListener('change',()=>{readControls();later(0)});
 
@@ -700,6 +753,11 @@ document.addEventListener('click',async e=>{
   if(g){const n=g.dataset.g,G=st.f.genres;st.f.genres=G.includes(n)?G.filter(x=>x!==n):[...G,n];g.setAttribute('aria-pressed',st.f.genres.includes(n));later(250);return}
   const ce=t.closest('[data-cert]');
   if(ce){const [ty,c]=ce.dataset.cert.split(/\|(.*)/s),cur=st.f.certs[ty];st.f.certs={...st.f.certs,[ty]:cur.includes(c)?cur.filter(x=>x!==c):[...cur,c]};ce.setAttribute('aria-pressed',st.f.certs[ty].includes(c));later(250);return}
+  const ka=t.closest('[data-kwadd]');if(ka){addKw(sugg[+ka.dataset.kwadd]);return}
+  const kt=t.closest('[data-kwt]');if(kt){const id=+kt.dataset.kwt;st.f.kw=st.f.kw.map(k=>k.id===id?{...k,out:!k.out}:k);renderKw();later(250);return}
+  const kd=t.closest('[data-kwdel]');if(kd){const id=+kd.dataset.kwdel;st.f.kw=st.f.kw.filter(k=>k.id!==id);renderKw();later(250);return}
+  const km=t.closest('[data-km]');if(km){st.f.kwmode=km.dataset.km;renderKw();if(st.f.kw.filter(k=>!k.out).length>1)later(0);return}
+  if(!t.closest('.kwbox')) showSugg([]);
   const gm=t.closest('[data-gm]');if(gm){st.f.gmode=gm.dataset.gm;syncControls();later(0);return}
   const ty=t.closest('[data-t]');if(ty){st.type=ty.dataset.t;remapGenres();syncControls();later(0);return}
   const w=t.closest('[data-w]');if(w){wlMode=w.dataset.w;$$('#wlmode [data-w]').forEach(b=>b.setAttribute('aria-pressed',b===w));renderWatchlist();return}
