@@ -379,12 +379,12 @@ function certList(type){
   const L=(meta.certs[type][st.region]||[]).slice().sort((a,b)=>a.order-b.order).filter(c=>c.certification&&!seen.has(c.certification)&&seen.add(c.certification));
   return L.length&&!seen.has('NR')?[{certification:'NR',meaning:'Not rated, or no rating listed',order:-1},...L]:L;
 }
-/* Movie ratings that are never shown: NR/unrated, R and NC-17 in the US, plus the top movie rating in other countries (18, R18 and the like). */
-function blockedCerts(){
-  const L=certList('movie'),top=L.length>1?L[L.length-1].certification:'';
-  return new Set(['NR','NC-17',st.region==='US'?'R':'',top].filter(Boolean));
+/* Ratings that are never shown. Movies: NR/unrated, R and NC-17 in the US. Shows: TV-MA in the US.
+   Elsewhere, the country's top rating for that type (18, R18 and the like). */
+function blockedCerts(type){
+  const L=certList(type),top=L.length>1?L[L.length-1].certification:'',us=st.region==='US';
+  return new Set((type==='movie'?['NR','NC-17',us?'R':'',top]:[us?'TV-MA':'',top]).filter(Boolean));
 }
-/* Country of origin: a co-production counts if any of its origin countries matches. */
 /* Keywords: excluded ones must be absent; included ones must match any or all, per the toggle. */
 const kwOk=it=>{
   const ids=info.get(key(it))?.kw||[],inc=st.f.kw.filter(k=>!k.out),out=st.f.kw.filter(k=>k.out);
@@ -392,10 +392,11 @@ const kwOk=it=>{
   return !inc.length||(st.f.kwmode==='all'?inc.every(k=>ids.includes(k.id)):inc.some(k=>ids.includes(k.id)));
 };
 const baseOk=it=>offers(info.get(key(it))?.prov).length&&certOk(it)&&kwOk(it);
+/* Country of origin: a co-production counts if any of its origin countries matches. */
 const originOk=it=>!st.f.origin||(info.get(key(it))?.origin||[]).includes(st.f.origin);
 const certOk=it=>{
   const c=info.get(key(it))?.cert,sel=st.f.certs[it.type];
-  if(it.type==='movie'&&c&&blockedCerts().has(c)) return false;
+  if(c&&blockedCerts(it.type).has(c)) return false;
   return !sel.length||sel.includes(c);
 };
 /* Services being searched: your services minus any toggled off above the search bar. */
@@ -698,8 +699,7 @@ function renderGenres(){
 }
 function renderCerts(){
   const types=st.type==='both'?['movie','tv']:[st.type];
-  const bl=blockedCerts();
-  const rows=types.map(t=>{const L=certList(t).filter(c=>t!=='movie'||!bl.has(c.certification));if(!L.length)return '';
+  const rows=types.map(t=>{const bl=blockedCerts(t),L=certList(t).filter(c=>!bl.has(c.certification));if(!L.length)return '';
     return `<div class="crow">${types.length>1?`<span>${t==='movie'?'Movies':'Shows'}</span>`:''}<div class="chips">${L.map(c=>`<button class="chip" data-cert="${t}|${esc(c.certification)}" title="${esc(c.meaning)}" aria-pressed="${st.f.certs[t].includes(c.certification)}">${esc(c.certification)}</button>`).join('')}</div></div>`}).join('');
   $('#certs').innerHTML=rows||'<span class="meta">No age ratings listed for this country.</span>';
 }
@@ -721,8 +721,7 @@ function renderPresets(){
   $('#presets').innerHTML=st.presets.length?st.presets.map((p,i)=>`<span class="chip pchip"><button data-preset="${i}">${esc(p.name)}</button><button data-pdel="${i}" aria-label="Delete ${esc(p.name)}">×</button></span>`).join(''):'<span class="meta">Save a filter combo to reuse it in one tap.</span>';
 }
 function syncControls(){
-  const bl=blockedCerts();
-  if(st.f.certs.movie.some(c=>bl.has(c))){st.f.certs={...st.f.certs,movie:st.f.certs.movie.filter(c=>!bl.has(c))};save()}
+  for(const t of ['movie','tv']){const bl=blockedCerts(t);if(st.f.certs[t].some(c=>bl.has(c))){st.f.certs={...st.f.certs,[t]:st.f.certs[t].filter(c=>!bl.has(c))};save()}}
   const f=st.f;
   $('#q').value=f.q;$('#sort').value=f.sort;$('#yFrom').value=f.yFrom;$('#yTo').value=f.yTo;
   $('#minRating').value=f.minRating;$('#rOut').textContent=f.minRating?f.minRating+'+':'Any';
