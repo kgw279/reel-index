@@ -357,7 +357,6 @@ function certList(type){
   return (meta.certs[type][st.region]||[]).slice().sort((a,b)=>a.order-b.order).filter(c=>c.certification&&!seen.has(c.certification)&&seen.add(c.certification));
 }
 const certOk=it=>{const sel=st.f.certs[it.type];return !sel.length||sel.includes(info.get(key(it))?.cert)};
-const needsInfo=t=>!!st.f.q.trim()||(t==='tv'&&st.f.certs.tv.length>0);
 function offers(r){
   if(!r) return [];
   const out=new Map(),mono=st.f.mono.length?st.f.mono:MONO.map(m=>m[0]);
@@ -428,42 +427,40 @@ async function browse(reset){
   if(!reset&&(B.busy||!B.more)) return;
   const my=reset?++token:token;
   const f=st.f,q=f.q.trim(),types=activeTypes();
-  if(reset){Object.assign(B,{list:[],keys:new Set(),pages:{},total:{},results:0,more:true,search:!!q,exact:true});$('#grid').innerHTML='';$('#count').textContent=''}
+  if(reset){Object.assign(B,{list:[],keys:new Set(),pages:{},total:{},results:0,more:true,search:!!q});$('#grid').innerHTML='';$('#count').textContent=''}
   $('#title').textContent=q?`“${q}”`:(st.type==='movie'?'Movies':st.type==='tv'?'Shows':'Movies & shows')+(st.mine.length?' on your services':'');
   $('#hint').hidden=!!st.mine.length;
   B.busy=true;$('#more').hidden=true;$('#spin').hidden=false;
   try{
     if(!types.length){B.more=false;return}
-    /* One loop for every mode: server filters what TMDB can; titles needing a rating or provider check get it before they are shown. */
+    /* TMDB's catalog filters check "on your services" and "available as" separately, so its results are only candidates.
+       Every title is verified against its own per-country offers (your service AND an allowed availability type) and its rating before it is shown. */
     let fresh=[],tries=0;
     do{
       tries++;
       const got=await Promise.all(types.filter(hasMore).map(async t=>{
         const pg=(B.pages[t]||0)+1,d=q?await api(`/search/${t}`,{query:q,page:pg,include_adult:false}):await api(`/discover/${t}`,params(t,pg));
         B.pages[t]=pg;B.total[t]=Math.min(d.total_pages,500);
-        if(pg===1&&!q)B.results+=d.total_results;
         return d.results.map(r=>norm(t,r));
       }));
       if(my!==token) return;
       let c=got.flat().filter(it=>!B.keys.has(key(it))&&(!q||clientMatch(it)));
-      await pool(c.filter(it=>needsInfo(it.type)),8,it=>getInfo(it.type,it.id));
+      await pool(c,10,it=>getInfo(it.type,it.id));
       if(my!==token) return;
-      c=c.filter(it=>!needsInfo(it.type)||(offers(info.get(key(it))?.prov).length&&certOk(it)));
+      c=c.filter(it=>offers(info.get(key(it))?.prov).length&&certOk(it));
       if(types.length>1&&!q) c.sort(cmp[f.sort]);
       fresh.push(...c);
       B.more=types.some(hasMore);
-    }while(fresh.length<12&&B.more&&tries<4&&types.some(needsInfo));
-    B.exact=!q&&!types.some(needsInfo);
+    }while(fresh.length<12&&B.more&&tries<5);
     fresh=fresh.filter(it=>{const k=key(it);if(B.keys.has(k))return false;B.keys.add(k);items.set(k,it);return true});
     B.list.push(...fresh);
     $('#grid').insertAdjacentHTML('beforeend',fresh.filter(visible).map(card).join(''));
-    pool(fresh.filter(it=>!info.has(key(it))),8,async it=>{await getInfo(it.type,it.id);if(my===token)paintInfo(key(it))});
   }catch(e){if(my===token){B.more=false;showError(e)}}
   finally{
     if(my===token){
       B.busy=false;$('#spin').hidden=true;$('#more').hidden=!B.more;
       const n=$$('#grid .card').length;
-      $('#count').textContent=B.search?`${n} match${n===1?'':'es'} on your services · relevance order`:B.exact&&B.results?`About ${B.results.toLocaleString()} titles`:`${n} title${n===1?'':'s'} shown`;
+      $('#count').textContent=B.search?`${n} match${n===1?'':'es'} on your services · relevance order`:`${n} title${n===1?'':'s'} shown`;
       if(!n&&!$('#grid .empty')) $('#grid').innerHTML=emptyHTML(types.length?'Nothing matches':'No genre match',types.length?'Try loosening a filter or adding a service.':"Those genres don't exist for this type. Try Any instead of All, or another type.");
     }
   }
