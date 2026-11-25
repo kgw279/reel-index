@@ -119,8 +119,9 @@ input[type=range]{width:100%;accent-color:var(--acc)}
 .empty{grid-column:1/-1;text-align:center;padding:60px 16px;color:var(--mute)}
 .empty h2{color:var(--ink);font-stretch:72%;font-size:28px;margin:0 0 8px}
 .foot{display:flex;justify-content:center;padding:28px 0 0;min-height:60px}
-.spin{width:28px;height:28px;border:3px solid var(--line);border-top-color:var(--acc);border-radius:50%;animation:rot .8s linear infinite}
-@keyframes rot{to{rotate:1turn}}
+.loading{display:flex;align-items:center;gap:12px;color:var(--mute);font-size:14px}
+.spin{width:28px;height:28px;flex:none;border:3px solid var(--line);border-top-color:var(--acc);border-radius:50%;animation:rot .8s linear infinite}
+@keyframes rot{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 footer{max-width:1520px;margin:0 auto;padding:0 max(3vw,14px) 30px;font-size:13px;color:var(--mute)}
 
 dialog{border:0;padding:0;border-radius:18px;background:var(--panel);color:var(--ink);width:min(880px,94vw);max-height:90vh;box-shadow:0 30px 90px -20px #000c}
@@ -173,7 +174,8 @@ dialog::backdrop{background:#0009;backdrop-filter:blur(3px)}
   .wgroup{grid-template-columns:minmax(0,1fr)}
   .wgroup>span{padding-top:0}
 }
-@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+/* Reduced motion stops decorative motion only; the loading spinner keeps turning so progress stays visible. */
+@media (prefers-reduced-motion:reduce){*:not(.spin){transition:none!important;animation:none!important}.spin{animation-duration:1.6s}}
 </style>
 </head>
 <body>
@@ -256,7 +258,7 @@ dialog::backdrop{background:#0009;backdrop-filter:blur(3px)}
     <div class="status"><h1 id="title">Browse</h1><p id="count"></p></div>
     <div class="hint" id="hint" hidden><span>No services picked yet, so this shows everything available in your country.</span><button class="btn sm" data-open-settings>Pick my services</button></div>
     <div class="grid" id="grid"></div>
-    <div class="foot"><div class="spin" id="spin" hidden></div><button class="btn ghost" id="more" hidden>Load more</button></div>
+    <div class="foot"><div class="loading" id="spin" role="status" aria-live="polite" hidden><div class="spin"></div><span id="spinTxt">Loading…</span></div><button class="btn ghost" id="more" hidden>Load more</button></div>
   </main>
 </div>
 <footer>Data from TMDB. This product uses the TMDB API but is not endorsed or certified by TMDB. Streaming availability is provided by JustWatch through TMDB.</footer>
@@ -515,16 +517,17 @@ async function pullRound(S){
 
 /* ---------- Browse ---------- */
 let token=0;
-const B={list:[],keys:new Set(),sources:[],more:false,busy:false,search:false,summary:''};
+const B={list:[],keys:new Set(),sources:[],more:false,busy:false,search:false,summary:'',checked:0};
+const progress=t=>{$('#spinTxt').textContent=t};
 async function browse(reset){
   if(!meta.genres.movie.length) return;
   if(!reset&&(B.busy||!B.more)) return;
   const my=reset?++token:token;
   const f=st.f,q=f.q.trim(),types=activeTypes();
-  if(reset){Object.assign(B,{list:[],keys:new Set(),sources:[],more:true,search:!!q,summary:''});$('#grid').innerHTML='';$('#count').textContent=''}
+  if(reset){Object.assign(B,{list:[],keys:new Set(),sources:[],more:true,search:!!q,summary:'',checked:0});$('#grid').innerHTML='';$('#count').textContent=''}
   $('#title').textContent=q?`“${q}”`:(st.type==='movie'?'Movies':st.type==='tv'?'Shows':'Movies & shows')+(st.mine.length?' on your services':'');
   $('#hint').hidden=!!st.mine.length;
-  B.busy=true;$('#more').hidden=true;$('#spin').hidden=false;
+  B.busy=true;$('#more').hidden=true;$('#spin').hidden=false;progress(q&&reset?'Searching titles, people, keywords, studios…':'Finding titles…');
   try{
     if(!types.length){B.more=false;return}
     if(st.mine.length&&!activeMine().length){B.more=false;$('#grid').innerHTML=emptyHTML('All services are switched off','Tap a service logo above the search bar to include it again.');return}
@@ -541,7 +544,7 @@ async function browse(reset){
       const got=await pullRound(B.sources);
       if(my!==token) return;
       let c=got.filter(it=>types.includes(it.type)&&!B.keys.has(key(it))&&clientMatch(it));
-      await pool(c,10,it=>getInfo(it.type,it.id));
+      await pool(c,10,async it=>{await getInfo(it.type,it.id);if(my===token)progress(`Checking titles against your services and filters… ${++B.checked} checked`)});
       if(my!==token) return;
       c=c.filter(it=>baseOk(it)&&originOk(it));
       if(types.length>1&&!q) c.sort(cmp[f.sort]);
