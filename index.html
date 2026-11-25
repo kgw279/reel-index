@@ -547,7 +547,8 @@ async function browse(reset){
       if(types.length>1&&!q) c.sort(cmp[f.sort]);
       fresh.push(...c);
       B.more=B.sources.length>0;
-    }while(fresh.length<12&&B.more&&tries<5);
+    /* Narrow filters can leave whole pages empty: keep looking longer while nothing has been found yet. */
+    }while(fresh.length<12&&B.more&&(tries<5||(!fresh.length&&!B.list.length&&tries<20)));
     fresh=fresh.filter(it=>{const k=key(it);if(B.keys.has(k))return false;B.keys.add(k);items.set(k,it);return true});
     B.list.push(...fresh);
     $('#grid').insertAdjacentHTML('beforeend',fresh.filter(visible).map(card).join(''));
@@ -557,7 +558,8 @@ async function browse(reset){
       B.busy=false;$('#spin').hidden=true;$('#more').hidden=!B.more;
       const n=$$('#grid .card').length;
       $('#count').textContent=B.search?`${n} match${n===1?'':'es'} on your services${B.summary?' · also searched '+B.summary:''}`:`${n} title${n===1?'':'s'} shown`;
-      if(!n&&!$('#grid .empty')) $('#grid').innerHTML=emptyHTML(types.length?'Nothing matches':'No genre match',types.length?'Try loosening a filter or adding a service.':"Those genres don't exist for this type. Try Any instead of All, or another type.");
+      if(!n&&!$('#grid .empty')) $('#grid').innerHTML=!types.length?emptyHTML('No genre match',"Those genres don't exist for this type. Try Any instead of All, or another type."):B.more?emptyHTML('Nothing yet','None of the titles checked so far match these filters. Keep looking, or loosen a filter.','<button class="btn" id="keep">Keep looking</button>'):emptyHTML('Nothing matches','Try loosening a filter or adding a service.');
+      if(!n&&B.more) $('#more').hidden=true;
     }
   }
 }
@@ -838,6 +840,7 @@ $('#psave').addEventListener('click',()=>{
 $('#pname').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#psave').click()}});
 $('#freset').addEventListener('click',()=>{st.f={...DEF_F,q:st.f.q};syncControls();later(0)});
 $('#more').addEventListener('click',()=>browse(false));
+$('#grid').addEventListener('click',e=>{if(e.target.closest('#keep')){$('#grid').innerHTML='';browse(false)}});
 new IntersectionObserver(es=>{if(es[0].isIntersecting&&view==='browse'&&B.list.length)browse(false)},{rootMargin:'600px'}).observe($('.foot'));
 $('#fbtn').addEventListener('click',()=>document.body.classList.add('fopen'));
 $('#fclose').addEventListener('click',()=>document.body.classList.remove('fopen'));
