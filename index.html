@@ -215,6 +215,10 @@ dialog::backdrop{background:#0009;backdrop-filter:blur(3px)}
       <select id="maxRuntime"><option value="">Any length</option><option value="30">Up to 30 min</option><option value="60">Up to 1 hr</option><option value="90">Up to 1 hr 30</option><option value="120">Up to 2 hr</option><option value="150">Up to 2 hr 30</option></select>
     </div>
     <div class="fs">
+      <h4>Country of origin</h4>
+      <select id="origin"><option value="">Any country</option></select>
+    </div>
+    <div class="fs">
       <h4>Original language</h4>
       <select id="lang"><option value="">Any language</option></select>
     </div>
@@ -281,7 +285,7 @@ const MONO_SHORT={flatrate:'Stream',free:'Free',ads:'With ads',rent:'Rent',buy:'
 const SORTS=[['pop','Most popular'],['rating','Top rated'],['new','Newest'],['az','Title A–Z']];
 const ALIAS={'Action':'Action & Adventure','Adventure':'Action & Adventure','Science Fiction':'Sci-Fi & Fantasy','Fantasy':'Sci-Fi & Fantasy','War':'War & Politics','Action & Adventure':['Action','Adventure'],'Sci-Fi & Fantasy':['Science Fiction','Fantasy'],'War & Politics':['War']};
 const TV_ONLY=['Kids','News','Reality','Soap','Talk'];
-const DEF_F={q:'',genres:[],gmode:'any',yFrom:'',yTo:'',minRating:0,minVotes:50,maxRuntime:'',lang:'',mono:['flatrate','free','ads'],sort:'pop',hideSeen:false,certs:{movie:[],tv:[]}};
+const DEF_F={q:'',genres:[],gmode:'any',yFrom:'',yTo:'',minRating:0,minVotes:50,maxRuntime:'',lang:'',mono:['flatrate','free','ads'],sort:'pop',hideSeen:false,certs:{movie:[],tv:[]},origin:'US'};
 const ICON={bm:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M6 3h12v18l-6-4.5L6 21z"/></svg>',ck:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5L20 7"/></svg>'};
 
 let st={key:'',region:'US',mine:[],type:'movie',f:{...DEF_F},list:{},presets:[]};
@@ -289,7 +293,7 @@ try{const s=JSON.parse(localStorage.getItem(LS)||'null');if(s)st={...st,...s,f:{
 if(!st.f.certs||!Array.isArray(st.f.certs.movie)||!Array.isArray(st.f.certs.tv))st.f.certs={movie:[],tv:[]};
 const save=()=>{try{localStorage.setItem(LS,JSON.stringify(st))}catch(e){}};
 
-const meta={regions:[],providers:[],pmap:new Map(),genres:{movie:[],tv:[]},langs:[],certs:{movie:{},tv:{}}};
+const meta={regions:[],providers:[],pmap:new Map(),genres:{movie:[],tv:[]},langs:[],countries:[],certs:{movie:{},tv:{}}};
 const cache=new Map(),info=new Map(),items=new Map();
 let view='browse',wlMode='todo',showAllProv=false,dirty=false;
 const key=it=>it.type+':'+it.id;
@@ -333,7 +337,8 @@ async function loadProviders(){
   meta.pmap=m;
 }
 async function loadMeta(){
-  const [regs,gm,gt,langs,cm,ct]=await Promise.all([api('/watch/providers/regions'),api('/genre/movie/list'),api('/genre/tv/list'),api('/configuration/languages'),api('/certification/movie/list'),api('/certification/tv/list'),loadProviders()]);
+  const [regs,gm,gt,langs,cm,ct,cn]=await Promise.all([api('/watch/providers/regions'),api('/genre/movie/list'),api('/genre/tv/list'),api('/configuration/languages'),api('/certification/movie/list'),api('/certification/tv/list'),api('/configuration/countries'),loadProviders()]);
+  meta.countries=cn.filter(c=>c.english_name).sort((a,b)=>a.english_name.localeCompare(b.english_name));
   meta.certs={movie:cm.certifications||{},tv:ct.certifications||{}};
   meta.regions=regs.results.sort((a,b)=>a.english_name.localeCompare(b.english_name));
   meta.genres={movie:gm.genres,tv:gt.genres};
@@ -344,7 +349,7 @@ async function getInfo(type,id){
   const k=type+':'+id;
   if(info.has(k)) return info.get(k);
   const d=await api(`/${type}/${id}`,{append_to_response:type==='movie'?'watch/providers,release_dates':'watch/providers,content_ratings'});
-  const v={prov:d['watch/providers']?.results?.[st.region]||null,cert:certOf(type,d)||'NR'};
+  const v={prov:d['watch/providers']?.results?.[st.region]||null,cert:certOf(type,d)||'NR',origin:d.origin_country?.length?d.origin_country:(d.production_countries||[]).map(c=>c.iso_3166_1)};
   info.set(k,v);return v;
 }
 function certOf(type,d){
@@ -362,6 +367,8 @@ function blockedCerts(){
   const L=certList('movie'),top=L.length>1?L[L.length-1].certification:'';
   return new Set(['NC-17',top].filter(Boolean));
 }
+/* Country of origin: a co-production counts if any of its origin countries matches. */
+const originOk=it=>!st.f.origin||(info.get(key(it))?.origin||[]).includes(st.f.origin);
 const certOk=it=>{
   const c=info.get(key(it))?.cert,sel=st.f.certs[it.type];
   if(it.type==='movie'&&c&&blockedCerts().has(c)) return false;
@@ -404,7 +411,7 @@ const norm=(type,r)=>({type,id:r.id,title:r.title||r.name||'Untitled',date:r.rel
 function params(type,page){
   const f=st.f,mv=type==='movie',d=mv?'primary_release_date':'first_air_date';
   const sm={pop:'popularity.desc',rating:'vote_average.desc',new:d+'.desc',az:mv?'title.asc':'name.asc'};
-  const p={page,sort_by:sm[f.sort],watch_region:st.region,include_adult:false,'vote_count.gte':f.minVotes||'','vote_average.gte':f.minRating||'',with_original_language:f.lang,'with_runtime.lte':f.maxRuntime};
+  const p={page,sort_by:sm[f.sort],watch_region:st.region,include_adult:false,'vote_count.gte':f.minVotes||'','vote_average.gte':f.minRating||'',with_original_language:f.lang,with_origin_country:f.origin,'with_runtime.lte':f.maxRuntime};
   if(st.mine.length) p.with_watch_providers=st.mine.join('|');
   if(f.mono.length) p.with_watch_monetization_types=f.mono.join('|');
   /* Only a hint to narrow TMDB's candidates; the app's own per-title check decides. TMDB's NR excludes titles with no rating, so skip the hint then. */
@@ -458,7 +465,7 @@ async function browse(reset){
       let c=got.flat().filter(it=>!B.keys.has(key(it))&&(!q||clientMatch(it)));
       await pool(c,10,it=>getInfo(it.type,it.id));
       if(my!==token) return;
-      c=c.filter(it=>offers(info.get(key(it))?.prov).length&&certOk(it));
+      c=c.filter(it=>offers(info.get(key(it))?.prov).length&&certOk(it)&&originOk(it));
       if(types.length>1&&!q) c.sort(cmp[f.sort]);
       fresh.push(...c);
       B.more=types.some(hasMore);
@@ -598,6 +605,7 @@ async function connect(){
 function renderFilterOptions(){
   $('#sort').innerHTML=SORTS.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
   $('#mono').innerHTML=MONO.map(([v,l])=>`<label class="check"><input type="checkbox" data-m="${v}">${l}</label>`).join('');
+  $('#origin').innerHTML='<option value="">Any country</option>'+meta.countries.map(c=>`<option value="${esc(c.iso_3166_1)}">${esc(c.english_name)}</option>`).join('');
   $('#lang').innerHTML='<option value="">Any language</option>'+meta.langs.map(l=>`<option value="${esc(l.iso_639_1)}">${esc(l.english_name)}</option>`).join('');
 }
 function renderGenres(){
@@ -617,7 +625,7 @@ function syncControls(){
   const f=st.f;
   $('#q').value=f.q;$('#sort').value=f.sort;$('#yFrom').value=f.yFrom;$('#yTo').value=f.yTo;
   $('#minRating').value=f.minRating;$('#rOut').textContent=f.minRating?f.minRating+'+':'Any';
-  $('#minVotes').value=String(f.minVotes);$('#maxRuntime').value=f.maxRuntime;$('#lang').value=f.lang;$('#hideSeen').checked=f.hideSeen;
+  $('#minVotes').value=String(f.minVotes);$('#maxRuntime').value=f.maxRuntime;$('#lang').value=f.lang;$('#origin').value=f.origin;$('#hideSeen').checked=f.hideSeen;
   $$('[data-m]').forEach(c=>c.checked=f.mono.includes(c.dataset.m));
   $$('#types [data-t]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.t===st.type));
   $$('#gmode [data-gm]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.gm===f.gmode));
@@ -627,7 +635,7 @@ function readControls(){
   const f=st.f,yr=v=>/^\d{4}$/.test(v.trim())?v.trim():'';
   f.q=$('#q').value;f.sort=$('#sort').value;f.yFrom=yr($('#yFrom').value);f.yTo=yr($('#yTo').value);
   f.minRating=parseFloat($('#minRating').value)||0;$('#rOut').textContent=f.minRating?f.minRating+'+':'Any';
-  f.minVotes=Number($('#minVotes').value)||0;f.maxRuntime=$('#maxRuntime').value;f.lang=$('#lang').value;f.hideSeen=$('#hideSeen').checked;
+  f.minVotes=Number($('#minVotes').value)||0;f.maxRuntime=$('#maxRuntime').value;f.lang=$('#lang').value;f.origin=$('#origin').value;f.hideSeen=$('#hideSeen').checked;
   f.mono=$$('[data-m]').filter(c=>c.checked).map(c=>c.dataset.m);
 }
 let deb;
