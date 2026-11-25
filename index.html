@@ -103,9 +103,7 @@ input[type=range]{width:100%;accent-color:var(--acc)}
 .card:hover .poster{transform:translateY(-3px)}
 .poster img.p{width:100%;height:100%;object-fit:cover;display:block}
 .noimg{position:absolute;inset:0;display:grid;place-items:center;padding:14px;text-align:center;font-weight:800;font-stretch:72%;font-size:19px;color:var(--mute)}
-.cert{display:inline-block;font-size:11px;font-weight:750;letter-spacing:.02em;line-height:1;padding:4px 6px;border-radius:5px;background:#fff;color:#111;box-shadow:0 1px 4px #0006;white-space:nowrap}
-.certs{position:absolute;top:6px;left:6px}
-.dmain .cert{vertical-align:2px;margin-right:2px;box-shadow:none;border:1px solid var(--line)}
+.cert{display:inline-block;font-size:10.5px;font-weight:750;letter-spacing:.02em;line-height:1;padding:3px 5px;border-radius:4px;border:1px solid currentColor;white-space:nowrap;vertical-align:1px}
 .crow+.crow{margin-top:10px}
 .crow>span{display:block;font-size:12px;color:var(--mute);margin-bottom:5px}
 .badges{position:absolute;left:6px;bottom:6px;right:6px;display:flex;gap:4px;flex-wrap:wrap}
@@ -608,11 +606,11 @@ function card(it){
   const k=key(it),L=st.list[k]||{};
   return `<article class="card${L.seen?' seen':''}" data-k="${esc(k)}">
 <div class="poster">${it.poster?`<img class="p" loading="lazy" src="${IMG}w342${esc(it.poster)}" alt="">`:`<span class="noimg">${esc(it.title)}</span>`}
-<div class="certs" data-c="${esc(k)}">${certPill(k)}</div><div class="badges" data-b="${esc(k)}">${badges(k)}</div>
-<div class="acts"><button class="ic bm" data-act="list" data-k="${esc(k)}" aria-pressed="${!!L.list}" aria-label="Watchlist" title="Watchlist">${ICON.bm}</button><button class="ic" data-act="seen" data-k="${esc(k)}" aria-pressed="${!!L.seen}" aria-label="Seen it" title="Seen it">${ICON.ck}</button></div></div>
-<h3>${esc(it.title)}</h3>${view==='browse'&&B.search&&it.via?`<p class="via">${esc(it.via)}</p>`:''}<p class="meta">${esc(it.year||'TBA')}${it.rating?` · ★ ${it.rating.toFixed(1)}`:''}${st.type==='both'||view==='watch'?`<span class="tag">${it.type==='tv'?'Show':'Movie'}</span>`:''}</p></article>`;
+<div class="badges" data-b="${esc(k)}">${badges(k)}</div>
+<div class="acts"><button class="ic bm" data-act="list" data-k="${esc(k)}" aria-pressed="${!!L.list}" aria-label="Watchlist" title="Watchlist">${ICON.bm}</button></div></div>
+<h3>${esc(it.title)}</h3>${view==='browse'&&B.search&&it.via?`<p class="via">${esc(it.via)}</p>`:''}<p class="meta">${esc(it.year||'TBA')}${it.rating?` · ★ ${it.rating.toFixed(1)}`:''}<span data-c="${esc(k)}">${certPill(k)}</span>${st.type==='both'||view==='watch'?`<span class="tag">${it.type==='tv'?'Show':'Movie'}</span>`:''}</p></article>`;
 }
-const certPill=k=>{const c=info.get(k)?.cert;return c?`<span class="cert" title="${c==='NR'?'Not rated':'Age rating'}">${esc(c)}</span>`:''};
+const certPill=k=>{const c=info.get(k)?.cert;return c?` · <span class="cert" title="${c==='NR'?'Not rated':'Age rating'}">${esc(c)}</span>`:''};
 function paintInfo(k){const e=CSS.escape(k);$$(`[data-b="${e}"]`).forEach(el=>el.innerHTML=badges(k));$$(`[data-c="${e}"]`).forEach(el=>el.innerHTML=certPill(k))}
 
 function toggle(k,field){
