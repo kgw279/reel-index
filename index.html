@@ -362,10 +362,10 @@ function certList(type){
   const L=(meta.certs[type][st.region]||[]).slice().sort((a,b)=>a.order-b.order).filter(c=>c.certification&&!seen.has(c.certification)&&seen.add(c.certification));
   return L.length&&!seen.has('NR')?[{certification:'NR',meaning:'Not rated, or no rating listed',order:-1},...L]:L;
 }
-/* Adult-only movie ratings are never shown: NC-17 in the US, and the top movie rating in other countries (18, R18 and the like). */
+/* Movie ratings that are never shown: R and NC-17 in the US, plus the top movie rating in other countries (18, R18 and the like). */
 function blockedCerts(){
   const L=certList('movie'),top=L.length>1?L[L.length-1].certification:'';
-  return new Set(['NC-17',top].filter(Boolean));
+  return new Set(['NC-17',st.region==='US'?'R':'',top].filter(Boolean));
 }
 /* Country of origin: a co-production counts if any of its origin countries matches. */
 const originOk=it=>!st.f.origin||(info.get(key(it))?.origin||[]).includes(st.f.origin);
