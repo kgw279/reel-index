@@ -344,10 +344,14 @@ async function api(path,params={}){
   if(k) u.searchParams.set('api_key',k);
   const ck=u.toString();
   if(cache.has(ck)) return cache.get(ck);
-  const p=fetch(ck,bearer?{headers:{Authorization:'Bearer '+st.key}}:undefined).then(async r=>{
-    if(!r.ok){const e=new Error('TMDB error '+r.status);e.status=r.status;throw e}
-    return r.json();
-  });
+  const p=(async()=>{
+    for(let attempt=0;;attempt++){
+      const r=await fetch(ck,bearer?{headers:{Authorization:'Bearer '+st.key}}:undefined);
+      if(r.status===429&&attempt<5){await new Promise(w=>setTimeout(w,(Number(r.headers.get('Retry-After'))||1)*1000*(attempt+1)));continue}
+      if(!r.ok){const e=new Error('TMDB error '+r.status);e.status=r.status;throw e}
+      return r.json();
+    }
+  })();
   cache.set(ck,p);p.catch(()=>cache.delete(ck));
   return p;
 }
@@ -527,66 +531,89 @@ async function pullRound(S){
   return out;
 }
 
-/* ---------- Browse ---------- */
+/* ---------- Browse ----------
+   A scan pulls candidates from the sources and verifies each one (services, availability, rating, keywords, origin).
+   It keeps going in the background after the first page so the count becomes exact; pages render from what it has found.
+   Very large sets stop at a checking cap and show an estimate, with an option to keep counting. */
 let token=0;
-const B={list:[],keys:new Set(),sources:[],more:false,busy:false,search:false,summary:'',checked:0,kept:0,cand:0};
+const PAGE=24,CAP=1200;
+const B={matched:[],shown:0,keys:new Set(),seen:new Set(),sources:[],done:true,search:false,summary:'',checked:0,kept:0,cand:0,cap:CAP,waiters:[],failed:null};
 const progress=t=>{$('#spinTxt').textContent=t};
-async function browse(reset){
+const capped=()=>B.done&&B.sources.length>0;
+function notify(){B.waiters=B.waiters.filter(w=>{if(B.matched.length>=w.n||B.done){w.res();return false}return true})}
+const waitFor=n=>new Promise(res=>{B.waiters.push({n,res});notify()});
+
+async function browse(){
   if(!meta.genres.movie.length) return;
-  if(!reset&&(B.busy||!B.more)) return;
-  const my=reset?++token:token;
-  const f=st.f,q=f.q.trim(),types=activeTypes();
-  if(reset){Object.assign(B,{list:[],keys:new Set(),sources:[],more:true,search:!!q,summary:'',checked:0,kept:0,cand:0});$('#grid').innerHTML='';$('#count').textContent=''}
+  const my=++token,f=st.f,q=f.q.trim(),types=activeTypes();
+  B.waiters.forEach(w=>w.res());
+  Object.assign(B,{matched:[],shown:0,keys:new Set(),seen:new Set(),sources:[],done:false,search:!!q,summary:'',checked:0,kept:0,cand:0,cap:CAP,waiters:[],failed:null});
+  $('#grid').innerHTML='';$('#count').innerHTML='';$('#more').hidden=true;
   $('#title').textContent=q?`“${q}”`:(st.type==='movie'?'Movies':st.type==='tv'?'Shows':'Movies & shows')+(st.mine.length?' on your services':'');
   $('#hint').hidden=!!st.mine.length;
-  B.busy=true;$('#more').hidden=true;$('#spin').hidden=false;progress(q&&reset?'Searching titles, people, keywords, studios…':'Finding titles…');
+  if(!types.length){B.done=true;finish(my,emptyHTML('No genre match',"Those genres don't exist for this type. Try Any instead of All, or another type."));return}
+  if(st.mine.length&&!activeMine().length){B.done=true;finish(my,emptyHTML('All services are switched off','Tap a service logo above the search bar to include it again.'));return}
+  $('#spin').hidden=false;progress(q?'Searching titles, people, keywords, studios…':'Finding titles…');
+  try{B.sources=q?await searchSources(q,types):discoverSources(types)}catch(e){if(my===token)showError(e);return}
+  if(my!==token) return;
+  B.summary=B.sources.summary||'';
+  scan(my);
+  showMore(my);
+}
+async function scan(my){
+  const f=st.f,q=f.q.trim(),types=activeTypes();
   try{
-    if(!types.length){B.more=false;return}
-    if(st.mine.length&&!activeMine().length){B.more=false;$('#grid').innerHTML=emptyHTML('All services are switched off','Tap a service logo above the search bar to include it again.');return}
-    if(reset){
-      B.sources=q?await searchSources(q,types):discoverSources(types);
-      if(my!==token) return;
-      B.summary=B.sources.summary||'';
-    }
-    /* TMDB's catalog filters check "on your services" and "available as" separately, so its results are only candidates.
-       Every title is verified against its own per-country offers (your service AND an allowed availability type), rating, keywords and origin before it is shown. */
-    let fresh=[],tries=0;
-    do{
-      tries++;
+    while(B.sources.length&&B.checked<B.cap){
       const got=await pullRound(B.sources);
       if(my!==token) return;
-      let c=got.filter(it=>types.includes(it.type)&&!B.keys.has(key(it))&&clientMatch(it));
-      await pool(c,10,async it=>{await getInfo(it.type,it.id);if(my===token)progress(`Checking titles against your services and filters… ${++B.checked} checked`)});
+      let c=got.filter(it=>{const k=key(it);if(!types.includes(it.type)||B.seen.has(k))return false;B.seen.add(k);return clientMatch(it)});
+      await pool(c,8,async it=>{await getInfo(it.type,it.id);if(my===token){B.checked++;progress(`Checking titles against your services and filters… ${B.checked} checked`)}});
       if(my!==token) return;
       c=c.filter(it=>baseOk(it)&&originOk(it));
       B.kept+=c.length;
       if(types.length>1&&!q) c.sort(cmp[f.sort]);
-      fresh.push(...c);
-      B.more=B.sources.length>0;
-    /* Narrow filters can leave whole pages empty: keep looking longer while nothing has been found yet. */
-    }while(fresh.length<12&&B.more&&(tries<5||(!fresh.length&&!B.list.length&&tries<20)));
-    fresh=fresh.filter(it=>{const k=key(it);if(B.keys.has(k))return false;B.keys.add(k);items.set(k,it);return true});
-    B.list.push(...fresh);
-    $('#grid').insertAdjacentHTML('beforeend',fresh.filter(visible).map(card).join(''));
-  }catch(e){if(my===token){B.more=false;showError(e)}}
-  finally{
-    if(my===token){
-      B.busy=false;$('#spin').hidden=true;$('#more').hidden=!B.more;
-      const n=$$('#grid .card').length;
-      $('#count').innerHTML=countHTML(n);
-      if(!n&&!$('#grid .empty')) $('#grid').innerHTML=!types.length?emptyHTML('No genre match',"Those genres don't exist for this type. Try Any instead of All, or another type."):B.more?emptyHTML('Nothing yet','None of the titles checked so far match these filters. Keep looking, or loosen a filter.','<button class="btn" id="keep">Keep looking</button>'):emptyHTML('Nothing matches','Try loosening a filter or adding a service.');
-      if(!n&&B.more) $('#more').hidden=true;
+      for(const it of c){const k=key(it);if(!B.keys.has(k)){B.keys.add(k);items.set(k,it);B.matched.push(it)}}
+      notify();updateStatus(my);
     }
-  }
+  }catch(e){if(my===token)B.failed=e}
+  if(my!==token) return;
+  B.done=true;notify();updateStatus(my);
 }
+async function showMore(my){
+  if(B.rendering) return;B.rendering=true;
+  try{
+    const target=B.shown+PAGE;
+    await waitFor(target);
+    if(my!==token) return;
+    const next=B.matched.slice(B.shown,target);B.shown+=next.length;
+    $('#grid .empty')?.remove();
+    $('#grid').insertAdjacentHTML('beforeend',next.filter(visible).map(card).join(''));
+    updateStatus(my);
+  }finally{B.rendering=false}
+}
+function finish(my,emptyMsg){if(my!==token)return;$('#spin').hidden=true;$('#grid').innerHTML=emptyMsg;$('#count').innerHTML=''}
+function updateStatus(my){
+  if(my!==token||view!=='browse') return;
+  $('#count').innerHTML=countHTML();
+  $('#spin').hidden=B.done;
+  $('#more').hidden=!(B.shown<B.matched.length);
+  if(B.done&&B.failed&&!B.matched.length){showError(B.failed);return}
+  if(B.done&&!B.matched.length&&!$('#grid .empty')) $('#grid').innerHTML=capped()
+    ?emptyHTML('Nothing yet',`None of the first ${B.checked.toLocaleString()} titles checked match these filters. Keep looking, or loosen a filter.`,'<button class="btn" id="keep">Keep looking</button>')
+    :emptyHTML('Nothing matches','Try loosening a filter or adding a service.');
+  if(B.done&&capped()&&B.matched.length&&!$('#keepcount')) $('#count').insertAdjacentHTML('beforeend',' <button class="link" id="keepcount">Keep counting</button>');
+  if(B.shown<PAGE&&B.matched.length>B.shown&&!B.rendering) showMore(my);
+}
+function keepScanning(){B.cap+=CAP;B.done=false;$('#grid .empty')?.remove();scan(token);updateStatus(token)}
 /* Result count. Browsing: when more pages remain, estimate the total from TMDB's candidate count times the share of checked titles that passed. */
 const fmtN=x=>x>=1000?Number(x.toPrecision(2)).toLocaleString():String(x);
-function countHTML(n){
-  const tail=B.summary?`<span> · also searched ${esc(B.summary)}</span>`:'';
-  if(B.search) return `<b>${n}</b> ${n===1?'match':'matches'} on your services${B.more?'<span> so far</span>':''}${tail}`;
-  if(!B.more) return `<b>${n}</b> ${n===1?'title':'titles'}`;
-  const est=B.checked>=20&&B.cand?Math.max(n,Math.round(B.cand*B.kept/B.checked)):0;
-  return `<b>${n}</b> shown${est>n?`<span> of about ${fmtN(est)}</span>`:''}`;
+function countHTML(){
+  const n=B.matched.length,tail=B.summary?`<span> · also searched ${esc(B.summary)}</span>`:'';
+  const noun=B.search?(n===1?'match':'matches'):(n===1?'title':'titles');
+  if(!B.done) return `<b>${n.toLocaleString()}</b> found so far<span> · counting…</span>${tail}`;
+  if(!capped()) return `<b>${n.toLocaleString()}</b> ${noun}${B.search?' on your services':''}${tail}`;
+  const est=B.checked&&B.cand&&!B.search?Math.max(n,Math.round(B.cand*B.kept/B.checked)):0;
+  return `<b>${n.toLocaleString()}</b> ${noun} in the first ${B.checked.toLocaleString()} checked${est>n?`<span> · about ${fmtN(est)} in all</span>`:''}${tail}`;
 }
 const visible=it=>!(st.f.hideSeen&&st.list[key(it)]?.seen);
 const emptyHTML=(h,p,btn)=>`<div class="empty"><h2>${esc(h)}</h2><p>${esc(p)}</p>${btn||''}</div>`;
@@ -785,7 +812,7 @@ function readControls(){
 }
 let deb;
 function later(ms){clearTimeout(deb);deb=setTimeout(()=>{save();refresh()},ms)}
-function refresh(){updateFCount();if(view==='browse'){browse(true);facets()}else renderWatchlist()}
+function refresh(){updateFCount();if(view==='browse'){browse();facets()}else renderWatchlist()}
 
 /* Dynamic country and language options. TMDB has no facet counts, so sample the top titles that match every filter
    except country and language, verify them like any result, and list only the countries and languages they contain.
@@ -822,6 +849,7 @@ function fillSelect(sel,anyLabel,opts,val){
 }
 function setView(v){
   view=v;
+  if(v!=='browse') ++token;
   $$('.tab').forEach(t=>t.setAttribute('aria-selected',t.dataset.view===v));
   $('#bbar').hidden=v!=='browse';$('#svcs').hidden=v!=='browse';$('#wbar').hidden=v!=='watch';
   if(v!=='browse') document.body.classList.remove('fopen');
@@ -882,9 +910,10 @@ $('#psave').addEventListener('click',()=>{
 });
 $('#pname').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#psave').click()}});
 $('#freset').addEventListener('click',()=>{st.f={...DEF_F,q:st.f.q};syncControls();later(0)});
-$('#more').addEventListener('click',()=>browse(false));
-$('#grid').addEventListener('click',e=>{if(e.target.closest('#keep')){$('#grid').innerHTML='';browse(false)}});
-new IntersectionObserver(es=>{if(es[0].isIntersecting&&view==='browse'&&B.list.length)browse(false)},{rootMargin:'600px'}).observe($('.foot'));
+$('#more').addEventListener('click',()=>showMore(token));
+$('#grid').addEventListener('click',e=>{if(e.target.closest('#keep'))keepScanning()});
+$('#count').addEventListener('click',e=>{if(e.target.closest('#keepcount')){e.target.remove();keepScanning()}});
+new IntersectionObserver(es=>{if(es[0].isIntersecting&&view==='browse'&&B.shown&&B.shown<B.matched.length)showMore(token)},{rootMargin:'600px'}).observe($('.foot'));
 $('#fbtn').addEventListener('click',()=>document.body.classList.add('fopen'));
 $('#fclose').addEventListener('click',()=>document.body.classList.remove('fopen'));
 $('#scrim').addEventListener('click',()=>document.body.classList.remove('fopen'));
