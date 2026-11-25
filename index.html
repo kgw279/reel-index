@@ -32,12 +32,13 @@ a{color:inherit}
 .tab{border:0;background:none;padding:8px 13px;border-radius:999px;color:var(--mute);font-weight:650;min-height:40px;white-space:nowrap}
 .tab[aria-selected=true]{background:var(--ink);color:var(--bg)}
 .tab b{font-weight:650;opacity:.7;margin-left:3px}
-.minebtn{margin-left:auto;display:flex;align-items:center;gap:5px;border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:4px 12px 4px 5px;min-height:42px;font-weight:600;font-size:14px}
-.minebtn img{width:30px;height:30px;border-radius:8px;display:block}
-.minebtn .more{font-size:13px;color:var(--mute);padding:0 2px}
+.minebtn{margin-left:auto;display:flex;align-items:center;gap:5px;border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:4px 16px;min-height:42px;font-weight:600;font-size:14px}
 
-.layout{display:grid;grid-template-columns:268px minmax(0,1fr);gap:30px;padding:22px max(3vw,14px) 40px;max-width:1520px;margin:0 auto}
-#filters{position:sticky;top:78px;align-self:start;max-height:calc(100vh - 92px);overflow:auto;padding:0 6px 20px 0;scrollbar-width:thin}
+.layout{padding:22px max(3vw,14px) 40px;max-width:1520px;margin:0 auto}
+#filters{position:fixed;inset:0 auto 0 0;z-index:50;width:min(360px,90vw);height:100%;overflow:auto;background:var(--panel);padding:18px 18px 40px;translate:-105% 0;visibility:hidden;transition:translate .22s ease,visibility 0s .22s;box-shadow:20px 0 60px -20px #000a;scrollbar-width:thin}
+body.fopen #filters{translate:0 0;visibility:visible;transition:translate .22s ease}
+body.fopen #scrim{display:block;position:fixed;inset:0;background:#0008;z-index:40}
+.fhead .row{gap:4px}
 .fhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
 .fhead h2{margin:0;font-size:22px;font-stretch:72%;font-weight:800}
 .fs{border-top:1px solid var(--line);padding:14px 0}
@@ -76,7 +77,15 @@ input[type=range]{width:100%;accent-color:var(--acc)}
 .seg button{border:0;background:none;padding:0 13px;border-radius:8px;font-weight:650;font-size:14px;color:var(--mute);min-height:40px}
 .seg button[aria-pressed=true]{background:var(--panel);color:var(--ink);box-shadow:0 1px 3px #0003}
 #sort{width:auto;height:46px}
-#fbtn{display:none}
+#fbtn{display:inline-flex;align-items:center;gap:7px;height:46px}
+#fbtn b{background:var(--acc);color:#fff;border-radius:999px;font-size:12px;min-width:20px;height:20px;padding:0 6px;display:grid;place-items:center}
+.svcs{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:12px}
+.svc{border:0;background:none;padding:0;border-radius:12px;position:relative;width:46px;height:46px}
+.svc img{width:46px;height:46px;border-radius:12px;display:block;transition:filter .15s,opacity .15s}
+.svc[aria-pressed=true]{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--acc)}
+.svc[aria-pressed=false] img{filter:grayscale(1);opacity:.35}
+.svcs .lbl{font-size:13px;color:var(--mute);margin-right:2px}
+.svcs .link{margin-left:2px}
 .status{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin:4px 0 16px}
 .status h1{margin:0;font-size:clamp(26px,3.4vw,40px);font-stretch:70%;font-weight:800;line-height:1.05;text-wrap:balance}
 .status p{margin:0;color:var(--mute);font-size:14px}
@@ -104,6 +113,7 @@ input[type=range]{width:100%;accent-color:var(--acc)}
 .ic.bm[aria-pressed=true] path{fill:currentColor}
 .card h3{font-size:15px;line-height:1.25;margin:9px 0 2px;font-weight:650}
 .meta{font-size:13px;color:var(--mute);margin:0}
+.via{font-size:12px;font-weight:650;color:var(--acc);margin:0 0 1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tag{font-size:11px;font-weight:700;border:1px solid var(--line);border-radius:5px;padding:0 5px;margin-left:4px;vertical-align:1px}
 .card.seen .poster{opacity:.55}
 .empty{grid-column:1/-1;text-align:center;padding:60px 16px;color:var(--mute)}
@@ -154,17 +164,8 @@ dialog::backdrop{background:#0009;backdrop-filter:blur(3px)}
 .dload{padding:60px;text-align:center;color:var(--mute)}
 #scrim{display:none}
 
-@media (max-width:900px){
-  .layout{grid-template-columns:minmax(0,1fr)}
-  #filters{position:fixed;inset:0 auto 0 0;top:0;z-index:50;width:min(340px,88vw);max-height:none;height:100%;background:var(--panel);padding:18px 18px 40px;translate:-105% 0;transition:translate .22s ease;box-shadow:20px 0 60px -20px #000a}
-  body.fopen #filters{translate:0 0}
-  body.fopen #scrim{display:block;position:fixed;inset:0;background:#0008;z-index:40}
-  #fbtn{display:inline-flex;align-items:center;height:46px}
-}
 @media (max-width:600px){
   .top{flex-wrap:wrap;gap:8px}
-  .minebtn{padding-right:8px}
-  .minebtn .lbl{display:none}
   .grid{grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:18px 12px}
   .dmain{grid-template-columns:96px minmax(0,1fr);gap:14px;margin-top:-50px}
   .dposter{width:96px}
@@ -182,12 +183,12 @@ dialog::backdrop{background:#0009;backdrop-filter:blur(3px)}
     <button class="tab" role="tab" data-view="browse" aria-selected="true">Browse</button>
     <button class="tab" role="tab" data-view="watch" aria-selected="false">Watchlist<b id="wlc"></b></button>
   </nav>
-  <button class="minebtn" id="minebtn" aria-label="My services and settings"></button>
+  <button class="minebtn" id="minebtn">Setup</button>
 </header>
 
 <div class="layout">
   <aside id="filters" aria-label="Filters">
-    <div class="fhead"><h2>Filters</h2><button class="link" id="freset">Reset</button></div>
+    <div class="fhead"><h2>Filters</h2><div class="row"><button class="link" id="freset">Reset</button><button class="x" id="fclose" aria-label="Close filters">×</button></div></div>
     <div class="fs">
       <h4>Saved searches</h4>
       <div class="chips" id="presets"></div>
@@ -242,11 +243,12 @@ dialog::backdrop{background:#0009;backdrop-filter:blur(3px)}
   <div id="scrim"></div>
 
   <main>
+    <div class="svcs" id="svcs" aria-label="Services to search"></div>
     <div class="bar" id="bbar">
-      <label class="q"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="q" class="inp" type="search" placeholder="Search titles on your services" autocomplete="off"></label>
+      <label class="q"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="q" class="inp" type="search" placeholder="Search titles, people, keywords, studios, franchises, genres…" autocomplete="off"></label>
       <div class="seg" id="types"><button data-t="movie" aria-pressed="true">Movies</button><button data-t="tv" aria-pressed="false">Shows</button><button data-t="both" aria-pressed="false">Both</button></div>
       <select id="sort" aria-label="Sort"></select>
-      <button class="btn ghost" id="fbtn">Filters</button>
+      <button class="btn ghost" id="fbtn" aria-label="Open filters">Filters<b id="fcount" hidden></b></button>
     </div>
     <div class="bar" id="wbar" hidden>
       <div class="seg" id="wlmode"><button data-w="todo" aria-pressed="true">To watch</button><button data-w="seen" aria-pressed="false">Seen</button><button data-w="all" aria-pressed="false">All saved</button></div>
@@ -298,12 +300,13 @@ const MONO_SHORT={flatrate:'Stream',free:'Free',ads:'With ads',rent:'Rent',buy:'
 const SORTS=[['pop','Most popular'],['rating','Top rated'],['new','Newest'],['az','Title A–Z']];
 const ALIAS={'Action':'Action & Adventure','Adventure':'Action & Adventure','Science Fiction':'Sci-Fi & Fantasy','Fantasy':'Sci-Fi & Fantasy','War':'War & Politics','Action & Adventure':['Action','Adventure'],'Sci-Fi & Fantasy':['Science Fiction','Fantasy'],'War & Politics':['War']};
 const TV_ONLY=['Kids','News','Reality','Soap','Talk'];
-const DEF_F={q:'',genres:[],gmode:'any',yFrom:'',yTo:'',minRating:0,minVotes:50,maxRuntime:'',lang:'',mono:['flatrate','free','ads'],sort:'pop',hideSeen:false,certs:{movie:[],tv:[]},origin:'US',kw:[],kwmode:'any'};
+const DEF_F={q:'',genres:[],gmode:'any',yFrom:'',yTo:'',minRating:0,minVotes:50,maxRuntime:'',lang:'',mono:['flatrate','free','ads'],sort:'pop',hideSeen:false,certs:{movie:[],tv:[]},origin:'US',kw:[],kwmode:'any',svcOff:[]};
 const ICON={bm:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M6 3h12v18l-6-4.5L6 21z"/></svg>',ck:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5L20 7"/></svg>'};
 
 let st={key:'',region:'US',mine:[],type:'movie',f:{...DEF_F},list:{},presets:[]};
 try{const s=JSON.parse(localStorage.getItem(LS)||'null');if(s)st={...st,...s,f:{...DEF_F,...(s.f||{})}}}catch(e){}
 if(!Array.isArray(st.f.kw))st.f.kw=[];
+if(!Array.isArray(st.f.svcOff))st.f.svcOff=[];
 if(!st.f.certs||!Array.isArray(st.f.certs.movie)||!Array.isArray(st.f.certs.tv))st.f.certs={movie:[],tv:[]};
 const save=()=>{try{localStorage.setItem(LS,JSON.stringify(st))}catch(e){}};
 
@@ -395,10 +398,12 @@ const certOk=it=>{
   if(it.type==='movie'&&c&&blockedCerts().has(c)) return false;
   return !sel.length||sel.includes(c);
 };
+/* Services being searched: your services minus any toggled off above the search bar. */
+const activeMine=()=>st.mine.filter(id=>!st.f.svcOff.includes(id));
 function offers(r){
   if(!r) return [];
   const out=new Map(),mono=st.f.mono.length?st.f.mono:MONO.map(m=>m[0]);
-  for(const m of mono) for(const p of r[m]||[]) if((!st.mine.length||st.mine.includes(p.provider_id))&&!out.has(p.provider_id)) out.set(p.provider_id,p);
+  for(const m of mono) for(const p of r[m]||[]) if((!st.mine.length||activeMine().includes(p.provider_id))&&!out.has(p.provider_id)) out.set(p.provider_id,p);
   return [...out.values()];
 }
 
@@ -433,7 +438,7 @@ function params(type,page){
   const f=st.f,mv=type==='movie',d=mv?'primary_release_date':'first_air_date';
   const sm={pop:'popularity.desc',rating:'vote_average.desc',new:d+'.desc',az:mv?'title.asc':'name.asc'};
   const p={page,sort_by:sm[f.sort],watch_region:st.region,include_adult:false,'vote_count.gte':f.minVotes||'','vote_average.gte':f.minRating||'',with_original_language:f.lang,with_origin_country:f.origin,'with_runtime.lte':f.maxRuntime};
-  if(st.mine.length) p.with_watch_providers=st.mine.join('|');
+  if(st.mine.length) p.with_watch_providers=activeMine().join('|');
   if(f.mono.length) p.with_watch_monetization_types=f.mono.join('|');
   /* Only a hint to narrow TMDB's candidates; the app's own per-title check decides. TMDB's NR excludes titles with no rating, so skip the hint then. */
   if(mv&&f.certs.movie.length&&!f.certs.movie.includes('NR')){p.certification_country=st.region;p.certification=f.certs.movie.join('|')}
@@ -460,39 +465,87 @@ function clientMatch(it,skipLang){
 }
 const cmp={pop:(a,b)=>b.pop-a.pop,rating:(a,b)=>b.rating-a.rating,new:(a,b)=>b.date.localeCompare(a.date),az:(a,b)=>a.title.localeCompare(b.title)};
 
+/* ---------- Candidate sources ----------
+   Browse and search both pull candidates from sources; every candidate is then verified the same way.
+   A source is {via, next}: next() resolves to an array of items, or null once it is exhausted. */
+function pagedSource(fetchPage,map){
+  let pg=0,total=1;
+  return async()=>{if(pg>=total)return null;pg++;const d=await fetchPage(pg);total=Math.min(d.total_pages||1,500);return (d.results||[]).map(map).filter(Boolean)};
+}
+function listSource(fetchAll,size=20){
+  let list=null,i=0;
+  return async()=>{if(!list)list=await fetchAll();if(i>=list.length)return null;return list.slice(i,i+=size)};
+}
+const tagVia=(it,via)=>(it.via=via,it);
+const nameHit=(name,q)=>{const n=(name||'').toLowerCase();return q.toLowerCase().split(/\s+/).filter(Boolean).every(w=>n.includes(w))};
+function discoverSources(types){return types.map(t=>({next:pagedSource(pg=>api(`/discover/${t}`,params(t,pg)),r=>norm(t,r))}))}
+/* Global search: titles, people (everything they acted in or made), franchises, keywords, studios and genres.
+   Sources are listed in relevance order; a title found by several keeps the first reason. */
+async function searchSources(q,types){
+  const ok=t=>types.includes(t),safe=p=>p.catch(()=>({results:[]}));
+  const [pp,kw,co,cl]=await Promise.all([
+    safe(api('/search/person',{query:q,include_adult:false})),safe(api('/search/keyword',{query:q})),
+    safe(api('/search/company',{query:q})),ok('movie')?safe(api('/search/collection',{query:q,include_adult:false})):{results:[]}]);
+  const ql=q.toLowerCase(),exactFirst=L=>L.filter(x=>nameHit(x.name,q)).sort((a,b)=>(b.name.toLowerCase()===ql)-(a.name.toLowerCase()===ql));
+  const people=exactFirst(pp.results).slice(0,3),kws=exactFirst(kw.results).slice(0,3),cos=exactFirst(co.results).slice(0,2),cols=exactFirst(cl.results).slice(0,2);
+  const genres=[...new Set(types.flatMap(t=>meta.genres[t].filter(g=>g.name.toLowerCase()===ql||g.name.toLowerCase().startsWith(ql+' ')||(ql.length>3&&g.name.toLowerCase().startsWith(ql))).map(g=>g.name)))];
+  const S=[],list=a=>a.map(x=>x.name).join(', '),mk=(via,next)=>S.push({via,next});
+  for(const t of types) mk('titles',pagedSource(pg=>api(`/search/${t}`,{query:q,page:pg,include_adult:false}),r=>tagVia(norm(t,r),'Title match')));
+  for(const p of people) mk(p.name,listSource(async()=>{
+    const d=await api(`/person/${p.id}/combined_credits`),seen=new Set();
+    return [...(d.cast||[]).map(c=>[c,`With ${p.name}`]),...(d.crew||[]).map(c=>[c,`${c.job||'Crew'}: ${p.name}`])]
+      .filter(([c])=>ok(c.media_type)&&!seen.has(c.media_type+c.id)&&seen.add(c.media_type+c.id))
+      .sort((a,b)=>(b[0].popularity||0)-(a[0].popularity||0)).map(([c,via])=>tagVia(norm(c.media_type,c),via));
+  }));
+  for(const c of cols) mk(c.name,listSource(async()=>{const d=await api(`/collection/${c.id}`);return (d.parts||[]).map(r=>tagVia(norm('movie',r),`Part of ${c.name}`))}));
+  if(kws.length) for(const t of types) mk('keyword '+list(kws),pagedSource(pg=>api(`/discover/${t}`,{...params(t,pg),with_keywords:kws.map(k=>k.id).join('|')}),r=>tagVia(norm(t,r),`Tagged ${list(kws)}`)));
+  if(cos.length) for(const t of types) mk(list(cos),pagedSource(pg=>api(`/discover/${t}`,{...params(t,pg),with_companies:cos.map(c=>c.id).join('|')}),r=>tagVia(norm(t,r),`From ${list(cos)}`)));
+  for(const g of genres) for(const t of types){const ids=resolve(t,[g]).ids;if(ids.length) mk('genre '+g,pagedSource(pg=>api(`/discover/${t}`,{...params(t,pg),with_genres:ids.join('|')}),r=>tagVia(norm(t,r),`Genre: ${g}`)))}
+  S.summary=[people.length&&'people: '+list(people),cols.length&&'franchises: '+list(cols),kws.length&&'keywords: '+list(kws),cos.length&&'studios: '+list(cos),genres.length&&'genres: '+genres.join(', ')].filter(Boolean).join(' · ');
+  return S;
+}
+/* One round: one batch from every live source, in priority order; drops exhausted sources. */
+async function pullRound(S){
+  const got=await Promise.all(S.map(src=>src.next().catch(()=>null)));
+  const out=[];got.forEach((g,i)=>{if(g===null)S[i].done=true;else out.push(...g)});
+  for(let i=S.length-1;i>=0;i--) if(S[i].done) S.splice(i,1);
+  return out;
+}
+
 /* ---------- Browse ---------- */
 let token=0;
-const B={list:[],keys:new Set(),pages:{},total:{},results:0,more:false,busy:false,search:false};
-const hasMore=t=>B.total[t]==null||B.pages[t]<B.total[t];
+const B={list:[],keys:new Set(),sources:[],more:false,busy:false,search:false,summary:''};
 async function browse(reset){
   if(!meta.genres.movie.length) return;
   if(!reset&&(B.busy||!B.more)) return;
   const my=reset?++token:token;
   const f=st.f,q=f.q.trim(),types=activeTypes();
-  if(reset){Object.assign(B,{list:[],keys:new Set(),pages:{},total:{},results:0,more:true,search:!!q});$('#grid').innerHTML='';$('#count').textContent=''}
+  if(reset){Object.assign(B,{list:[],keys:new Set(),sources:[],more:true,search:!!q,summary:''});$('#grid').innerHTML='';$('#count').textContent=''}
   $('#title').textContent=q?`“${q}”`:(st.type==='movie'?'Movies':st.type==='tv'?'Shows':'Movies & shows')+(st.mine.length?' on your services':'');
   $('#hint').hidden=!!st.mine.length;
   B.busy=true;$('#more').hidden=true;$('#spin').hidden=false;
   try{
     if(!types.length){B.more=false;return}
+    if(st.mine.length&&!activeMine().length){B.more=false;$('#grid').innerHTML=emptyHTML('All services are switched off','Tap a service logo above the search bar to include it again.');return}
+    if(reset){
+      B.sources=q?await searchSources(q,types):discoverSources(types);
+      if(my!==token) return;
+      B.summary=B.sources.summary||'';
+    }
     /* TMDB's catalog filters check "on your services" and "available as" separately, so its results are only candidates.
-       Every title is verified against its own per-country offers (your service AND an allowed availability type) and its rating before it is shown. */
+       Every title is verified against its own per-country offers (your service AND an allowed availability type), rating, keywords and origin before it is shown. */
     let fresh=[],tries=0;
     do{
       tries++;
-      const got=await Promise.all(types.filter(hasMore).map(async t=>{
-        const pg=(B.pages[t]||0)+1,d=q?await api(`/search/${t}`,{query:q,page:pg,include_adult:false}):await api(`/discover/${t}`,params(t,pg));
-        B.pages[t]=pg;B.total[t]=Math.min(d.total_pages,500);
-        return d.results.map(r=>norm(t,r));
-      }));
+      const got=await pullRound(B.sources);
       if(my!==token) return;
-      let c=got.flat().filter(it=>!B.keys.has(key(it))&&(!q||clientMatch(it)));
+      let c=got.filter(it=>types.includes(it.type)&&!B.keys.has(key(it))&&clientMatch(it));
       await pool(c,10,it=>getInfo(it.type,it.id));
       if(my!==token) return;
       c=c.filter(it=>baseOk(it)&&originOk(it));
       if(types.length>1&&!q) c.sort(cmp[f.sort]);
       fresh.push(...c);
-      B.more=types.some(hasMore);
+      B.more=B.sources.length>0;
     }while(fresh.length<12&&B.more&&tries<5);
     fresh=fresh.filter(it=>{const k=key(it);if(B.keys.has(k))return false;B.keys.add(k);items.set(k,it);return true});
     B.list.push(...fresh);
@@ -502,7 +555,7 @@ async function browse(reset){
     if(my===token){
       B.busy=false;$('#spin').hidden=true;$('#more').hidden=!B.more;
       const n=$$('#grid .card').length;
-      $('#count').textContent=B.search?`${n} match${n===1?'':'es'} on your services · relevance order`:`${n} title${n===1?'':'s'} shown`;
+      $('#count').textContent=B.search?`${n} match${n===1?'':'es'} on your services${B.summary?' · also searched '+B.summary:''}`:`${n} title${n===1?'':'s'} shown`;
       if(!n&&!$('#grid .empty')) $('#grid').innerHTML=emptyHTML(types.length?'Nothing matches':'No genre match',types.length?'Try loosening a filter or adding a service.':"Those genres don't exist for this type. Try Any instead of All, or another type.");
     }
   }
@@ -527,7 +580,7 @@ function card(it){
 <div class="poster">${it.poster?`<img class="p" loading="lazy" src="${IMG}w342${esc(it.poster)}" alt="">`:`<span class="noimg">${esc(it.title)}</span>`}
 <div class="certs" data-c="${esc(k)}">${certPill(k)}</div><div class="badges" data-b="${esc(k)}">${badges(k)}</div>
 <div class="acts"><button class="ic bm" data-act="list" data-k="${esc(k)}" aria-pressed="${!!L.list}" aria-label="Watchlist" title="Watchlist">${ICON.bm}</button><button class="ic" data-act="seen" data-k="${esc(k)}" aria-pressed="${!!L.seen}" aria-label="Seen it" title="Seen it">${ICON.ck}</button></div></div>
-<h3>${esc(it.title)}</h3><p class="meta">${esc(it.year||'TBA')}${it.rating?` · ★ ${it.rating.toFixed(1)}`:''}${st.type==='both'||view==='watch'?`<span class="tag">${it.type==='tv'?'Show':'Movie'}</span>`:''}</p></article>`;
+<h3>${esc(it.title)}</h3>${view==='browse'&&B.search&&it.via?`<p class="via">${esc(it.via)}</p>`:''}<p class="meta">${esc(it.year||'TBA')}${it.rating?` · ★ ${it.rating.toFixed(1)}`:''}${st.type==='both'||view==='watch'?`<span class="tag">${it.type==='tv'?'Show':'Movie'}</span>`:''}</p></article>`;
 }
 const certPill=k=>{const c=info.get(k)?.cert;return c?`<span class="cert" title="${c==='NR'?'Not rated':'Age rating'}">${esc(c)}</span>`:''};
 function paintInfo(k){const e=CSS.escape(k);$$(`[data-b="${e}"]`).forEach(el=>el.innerHTML=badges(k));$$(`[data-c="${e}"]`).forEach(el=>el.innerHTML=certPill(k))}
@@ -591,9 +644,17 @@ ${cast?`<div class="dsec"><h3>Cast</h3><p>${cast}</p></div>`:''}
 }
 
 /* ---------- Settings ---------- */
-function renderMineBtn(){
+/* Service toggles above the search bar: each of your services can be switched off for the current search. */
+function renderSvcs(){
+  st.f.svcOff=st.f.svcOff.filter(id=>st.mine.includes(id));
   const ps=st.mine.map(id=>meta.pmap.get(id)).filter(Boolean);
-  $('#minebtn').innerHTML=ps.length?ps.slice(0,5).map(p=>`<img src="${IMG}w92${esc(p.logo_path)}" alt="${esc(p.provider_name)}">`).join('')+(ps.length>5?`<span class="more">+${ps.length-5}</span>`:'')+'<span class="lbl">&nbsp;Setup</span>':'<span style="padding-left:8px">Setup &amp; services</span>';
+  $('#svcs').innerHTML=ps.length?`<span class="lbl">Searching</span>`+ps.map(p=>{const on=!st.f.svcOff.includes(p.provider_id);return `<button class="svc" data-svc="${p.provider_id}" aria-pressed="${on}" title="${esc(p.provider_name)}${on?'':' (off)'}" aria-label="${esc(p.provider_name)}"><img src="${IMG}w92${esc(p.logo_path)}" alt=""></button>`}).join('')+'<button class="link" data-open-settings>Edit services</button>':'';
+}
+/* Number of filter groups changed from their defaults, shown on the Filters button. */
+function updateFCount(){
+  const f=st.f,d=DEF_F;
+  const n=[f.genres.length,f.kw.length,f.certs.movie.length+f.certs.tv.length,[...f.mono].sort().join()!==[...d.mono].sort().join(),f.yFrom||f.yTo,f.minRating,f.minVotes!==d.minVotes,f.maxRuntime,f.lang,f.origin!==d.origin,f.hideSeen].filter(Boolean).length;
+  $('#fcount').textContent=n;$('#fcount').hidden=!n;
 }
 function renderProvGrid(){
   const q=$('#pq').value.trim().toLowerCase();
@@ -621,7 +682,7 @@ function openSettings(msg){
   if(!$('#settings').open) $('#settings').showModal();
 }
 async function connect(){
-  try{await loadMeta();renderFilterOptions();syncControls();renderMineBtn();wlCount();refresh();return true}
+  try{await loadMeta();renderFilterOptions();syncControls();renderSvcs();wlCount();refresh();return true}
   catch(e){showError(e);return false}
 }
 
@@ -669,7 +730,7 @@ function syncControls(){
   $$('[data-m]').forEach(c=>c.checked=f.mono.includes(c.dataset.m));
   $$('#types [data-t]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.t===st.type));
   $$('#gmode [data-gm]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.gm===f.gmode));
-  renderGenres();renderKw();renderCerts();renderPresets();
+  renderGenres();renderKw();renderCerts();renderPresets();renderSvcs();updateFCount();
 }
 function readControls(){
   const f=st.f,yr=v=>/^\d{4}$/.test(v.trim())?v.trim():'';
@@ -680,7 +741,7 @@ function readControls(){
 }
 let deb;
 function later(ms){clearTimeout(deb);deb=setTimeout(()=>{save();refresh()},ms)}
-function refresh(){if(view==='browse'){browse(true);facets()}else renderWatchlist()}
+function refresh(){updateFCount();if(view==='browse'){browse(true);facets()}else renderWatchlist()}
 
 /* Dynamic country and language options. TMDB has no facet counts, so sample the top titles that match every filter
    except country and language, verify them like any result, and list only the countries and languages they contain.
@@ -690,13 +751,14 @@ async function facets(){
   if(!meta.genres.movie.length) return;
   const my=++ftoken,f=st.f,q=f.q.trim(),types=activeTypes(),PAGES=2;
   try{
-    const lists=await Promise.all(types.flatMap(t=>Array.from({length:PAGES},(_,i)=>{
-      if(q) return api(`/search/${t}`,{query:q,page:i+1,include_adult:false}).then(d=>d.results.map(r=>norm(t,r)));
+    let got=[];
+    if(q){const S=await searchSources(q,types);for(let i=0;i<PAGES&&S.length;i++)got.push(...await pullRound(S))}
+    else{const lists=await Promise.all(types.flatMap(t=>Array.from({length:PAGES},(_,i)=>{
       const p=params(t,i+1);delete p.with_origin_country;delete p.with_original_language;
       return api(`/discover/${t}`,p).then(d=>d.results.map(r=>norm(t,r)));
-    })));
+    })));got=lists.flat()}
     if(my!==ftoken) return;
-    const seen=new Set(),c=lists.flat().filter(it=>!seen.has(key(it))&&seen.add(key(it))&&(!q||clientMatch(it,true)));
+    const seen=new Set(),c=got.filter(it=>types.includes(it.type)&&!seen.has(key(it))&&seen.add(key(it))&&clientMatch(it,true));
     await pool(c,10,it=>getInfo(it.type,it.id));
     if(my!==ftoken) return;
     const ok=c.filter(baseOk);
@@ -717,8 +779,8 @@ function fillSelect(sel,anyLabel,opts,val){
 function setView(v){
   view=v;
   $$('.tab').forEach(t=>t.setAttribute('aria-selected',t.dataset.view===v));
-  $('#bbar').hidden=v!=='browse';$('#wbar').hidden=v!=='watch';
-  $('#filters').style.visibility=v==='browse'?'':'hidden';
+  $('#bbar').hidden=v!=='browse';$('#svcs').hidden=v!=='browse';$('#wbar').hidden=v!=='watch';
+  if(v!=='browse') document.body.classList.remove('fopen');
   refresh();
 }
 
@@ -753,6 +815,8 @@ document.addEventListener('click',async e=>{
   if(g){const n=g.dataset.g,G=st.f.genres;st.f.genres=G.includes(n)?G.filter(x=>x!==n):[...G,n];g.setAttribute('aria-pressed',st.f.genres.includes(n));later(250);return}
   const ce=t.closest('[data-cert]');
   if(ce){const [ty,c]=ce.dataset.cert.split(/\|(.*)/s),cur=st.f.certs[ty];st.f.certs={...st.f.certs,[ty]:cur.includes(c)?cur.filter(x=>x!==c):[...cur,c]};ce.setAttribute('aria-pressed',st.f.certs[ty].includes(c));later(250);return}
+  const sv=t.closest('[data-svc]');
+  if(sv){const id=+sv.dataset.svc,off=st.f.svcOff;st.f.svcOff=off.includes(id)?off.filter(x=>x!==id):[...off,id];renderSvcs();later(250);return}
   const ka=t.closest('[data-kwadd]');if(ka){addKw(sugg[+ka.dataset.kwadd]);return}
   const kt=t.closest('[data-kwt]');if(kt){const id=+kt.dataset.kwt;st.f.kw=st.f.kw.map(k=>k.id===id?{...k,out:!k.out}:k);renderKw();later(250);return}
   const kd=t.closest('[data-kwdel]');if(kd){const id=+kd.dataset.kwdel;st.f.kw=st.f.kw.filter(k=>k.id!==id);renderKw();later(250);return}
@@ -765,7 +829,7 @@ document.addEventListener('click',async e=>{
   const pr=t.closest('[data-preset]');if(pr){const p=st.presets[+pr.dataset.preset];st.f={...DEF_F,...JSON.parse(JSON.stringify(p.f))};if(!st.f.certs)st.f.certs={movie:[],tv:[]};st.type=p.type;remapGenres();syncControls();later(0);document.body.classList.remove('fopen');return}
   const pd=t.closest('[data-pdel]');if(pd){st.presets.splice(+pd.dataset.pdel,1);save();renderPresets();return}
   const pp=t.closest('[data-p]');
-  if(pp){const id=+pp.dataset.p;st.mine=st.mine.includes(id)?st.mine.filter(x=>x!==id):[...st.mine,id];save();dirty=true;pp.setAttribute('aria-pressed',st.mine.includes(id));$('#pcount').textContent=st.mine.length?`· ${st.mine.length} picked`:'';renderMineBtn();return}
+  if(pp){const id=+pp.dataset.p;st.mine=st.mine.includes(id)?st.mine.filter(x=>x!==id):[...st.mine,id];save();dirty=true;pp.setAttribute('aria-pressed',st.mine.includes(id));$('#pcount').textContent=st.mine.length?`· ${st.mine.length} picked`:'';renderSvcs();return}
 });
 $('#psave').addEventListener('click',()=>{
   const name=$('#pname').value.trim()||`Search ${st.presets.length+1}`;
@@ -777,6 +841,7 @@ $('#freset').addEventListener('click',()=>{st.f={...DEF_F,q:st.f.q};syncControls
 $('#more').addEventListener('click',()=>browse(false));
 new IntersectionObserver(es=>{if(es[0].isIntersecting&&view==='browse'&&B.list.length)browse(false)},{rootMargin:'600px'}).observe($('.foot'));
 $('#fbtn').addEventListener('click',()=>document.body.classList.add('fopen'));
+$('#fclose').addEventListener('click',()=>document.body.classList.remove('fopen'));
 $('#scrim').addEventListener('click',()=>document.body.classList.remove('fopen'));
 document.addEventListener('keydown',e=>{if(e.key==='Escape')document.body.classList.remove('fopen')});
 $('#minebtn').addEventListener('click',()=>openSettings());
@@ -787,7 +852,7 @@ async function saveKey(){
   if(!v){$('#keymsg').textContent='Paste a key first.';$('#keymsg').className='msg bad';return}
   st.key=v;cache.clear();info.clear();save();
   $('#keymsg').textContent='Connecting…';$('#keymsg').className='msg';
-  try{await loadMeta();renderFilterOptions();syncControls();renderMineBtn();wlCount();renderSettings();dirty=true;
+  try{await loadMeta();renderFilterOptions();syncControls();renderSvcs();wlCount();renderSettings();dirty=true;
     $('#keymsg').textContent=st.mine.length?'Connected.':'Connected. Now pick your services below.';}
   catch(e){$('#keymsg').textContent=errText(e);$('#keymsg').className='msg bad'}
 }
@@ -796,16 +861,16 @@ $('#key').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();
 $('#pq').addEventListener('keydown',e=>{if(e.key==='Enter')e.preventDefault()});
 $('#pq').addEventListener('input',renderProvGrid);
 $('#pall').addEventListener('click',()=>{showAllProv=true;renderProvGrid()});
-$('#pclear').addEventListener('click',()=>{st.mine=[];save();dirty=true;renderProvGrid();renderMineBtn()});
+$('#pclear').addEventListener('click',()=>{st.mine=[];save();dirty=true;renderProvGrid();renderSvcs()});
 $('#region').addEventListener('change',async()=>{
   st.region=$('#region').value;info.clear();st.f.certs={movie:[],tv:[]};save();dirty=true;renderCerts();
-  try{await loadProviders();renderProvGrid();renderMineBtn()}catch(e){$('#keymsg').textContent=errText(e);$('#keymsg').className='msg bad'}
+  try{await loadProviders();renderProvGrid();renderSvcs()}catch(e){$('#keymsg').textContent=errText(e);$('#keymsg').className='msg bad'}
 });
 $('#settings').addEventListener('close',()=>{if(dirty&&meta.genres.movie.length){dirty=false;refresh()}});
 ['#settings','#detail'].forEach(s=>$(s).addEventListener('click',e=>{if(e.target===$(s))$(s).close()}));
 
 /* ---------- Start ---------- */
-renderMineBtn();wlCount();
+renderSvcs();wlCount();
 if(st.key){$('#spin').hidden=false;connect()}
 else{
   $('#title').textContent='Your streaming directory';
