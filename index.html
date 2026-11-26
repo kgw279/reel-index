@@ -154,6 +154,8 @@ dialog::backdrop{background:#0009;backdrop-filter:blur(3px)}
 .pt span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pt[aria-pressed=true]{border-color:var(--acc);background:var(--accSoft);box-shadow:inset 0 0 0 1px var(--acc)}
 .sfoot{display:flex;justify-content:flex-end;padding-top:10px}
+.stack{display:grid;gap:8px}
+.tvrow{margin-top:10px}.tvrow select{flex:1 1 160px;width:auto}
 
 .dhero{position:relative;height:clamp(150px,30vw,300px);background:#000 center 20%/cover}
 .dhero::after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 30%,var(--panel))}
@@ -310,6 +312,16 @@ dialog::backdrop{background:#0009;backdrop-filter:blur(3px)}
       <input id="sharelink" class="inp share" readonly hidden aria-label="Setup link">
       <p id="sharemsg" class="msg" role="status"></p>
     </section>
+    <section class="ss" id="stv">
+      <h3>Send to TV</h3>
+      <p class="note">Connect Glowhouse to send a title to a TV from its page. Get a code on the Glowhouse admin page on the home PC. This stays on this device and isn't part of a shared setup link.</p>
+      <div id="ghoff" class="stack">
+        <input id="ghurl" class="inp" type="url" placeholder="Glowhouse address, like lights.you.workers.dev" autocomplete="off" spellcheck="false" autocapitalize="off">
+        <div class="row"><input id="ghcode" class="inp grow" inputmode="numeric" maxlength="6" placeholder="6-digit code" autocomplete="one-time-code"><button type="button" id="ghconnect" class="btn">Connect</button></div>
+      </div>
+      <div id="ghon" class="row between" hidden><span id="ghstatus"></span><button type="button" id="ghdisc" class="btn ghost sm">Disconnect</button></div>
+      <p id="ghmsg" class="msg" role="status"></p>
+    </section>
     <div class="sfoot"><button class="btn" value="done">Done</button></div>
   </form>
 </dialog>
@@ -331,7 +343,7 @@ const TV_ONLY=['Kids','News','Reality','Soap','Talk'];
 const DEF_F={q:'',genres:[],gmode:'any',yFrom:'',yTo:'',minRating:0,minVotes:50,maxRuntime:'',lang:'',mono:['flatrate','free','ads'],sort:'pop',hideSeen:false,certs:{movie:[],tv:[]},origin:'US',kw:[],kwmode:'any',svcOff:[]};
 const ICON={bm:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M6 3h12v18l-6-4.5L6 21z"/></svg>',ck:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5L20 7"/></svg>'};
 
-let st={key:'',region:'US',mine:[],type:'both',f:{...DEF_F},list:{},presets:[]};
+let st={key:'',region:'US',mine:[],type:'both',f:{...DEF_F},list:{},presets:[],gh:{url:'',token:'',tv:''}};
 try{const s=JSON.parse(localStorage.getItem(LS)||'null');if(s)st={...st,...s,f:{...DEF_F,...(s.f||{})}}}catch(e){}
 /* The app always opens on Both; saved searches and shared setups can still pick a type. */
 st.type='both';
@@ -721,12 +733,70 @@ async function openDetail(k){
 <div class="dmain">${d.poster_path?`<img class="dposter" src="${IMG}w342${esc(d.poster_path)}" alt="">`:'<div class="dposter"></div>'}
 <div><h2>${esc(it.title)}</h2><p class="meta">${[inf.cert?`<span class="cert" title="Age rating">${esc(inf.cert)}</span>`:'',esc(it.year),mv?'Movie':'Series',esc(rt),d.vote_count?`★ ${d.vote_average.toFixed(1)} (${d.vote_count.toLocaleString()} votes)`:''].filter(Boolean).join(' · ')}</p>
 <div class="chips">${(d.genres||[]).map(g=>`<span class="chip">${esc(g.name)}</span>`).join('')}</div>
-<div class="row"><button class="btn" data-act="list" data-k="${esc(k)}" aria-pressed="${!!L.list}">${L.list?'✓ On watchlist':'+ Watchlist'}</button><button class="btn ghost" data-act="seen" data-k="${esc(k)}" aria-pressed="${!!L.seen}">${L.seen?'✓ Seen':'Mark as seen'}</button></div></div></div>
+<div class="row"><button class="btn" data-act="list" data-k="${esc(k)}" aria-pressed="${!!L.list}">${L.list?'✓ On watchlist':'+ Watchlist'}</button><button class="btn ghost" data-act="seen" data-k="${esc(k)}" aria-pressed="${!!L.seen}">${L.seen?'✓ Seen':'Mark as seen'}</button></div>${ghOn()?`<div class="row tvrow"><select id="tvpick" aria-label="Which TV" disabled><option>Finding TVs…</option></select><button class="btn ghost" id="tvsend" data-send="${esc(k)}" disabled>Send to TV</button></div><p id="tvmsg" class="msg" role="status"></p>`:''}</div></div>
 <div class="dsec">${d.tagline?`<p class="tagline">${esc(d.tagline)}</p>`:''}<p>${esc(d.overview||'No overview yet.')}</p>${who.length?`<p class="meta">${mv?'Directed by':'Created by'} ${esc(who.join(', '))}</p>`:''}</div>
 <div class="dsec"><h3>Where to watch in ${esc(reg)}</h3>${groups||'<p class="meta">Not available to stream, rent or buy here right now.</p>'}</div>
 ${cast?`<div class="dsec"><h3>Cast</h3><p>${cast}</p></div>`:''}
 <div class="dsec links">${d.external_ids?.imdb_id?`<a href="https://www.imdb.com/title/${encodeURIComponent(d.external_ids.imdb_id)}/parentalguide" target="_blank" rel="noopener">Parents Guide</a>`:''}${r?.link?`<a href="${esc(r.link)}" target="_blank" rel="noopener">All watch options</a>`:''}${tr?`<a href="https://www.youtube.com/watch?v=${encodeURIComponent(tr.key)}" target="_blank" rel="noopener">Trailer</a>`:''}${d.external_ids?.imdb_id?`<a href="https://www.imdb.com/title/${encodeURIComponent(d.external_ids.imdb_id)}/" target="_blank" rel="noopener">IMDb</a>`:''}<a href="https://www.themoviedb.org/${type}/${encodeURIComponent(id)}" target="_blank" rel="noopener">TMDB</a></div>`;
+    if(ghOn()) loadTvPicker(k);
   }catch(e){$('#dbody').innerHTML=`<div class="dload">${esc(errText(e))}<br><br><button class="btn ghost" data-close>Close</button></div>`}
+}
+
+/* ---------- Send to TV (Glowhouse) ----------
+   Glowhouse gives Reel Index its own sign-in that can only list TVs and send a title to one.
+   The token stays in this browser's storage and is never put in a shared setup link. */
+const ghOn=()=>!!(st.gh.url&&st.gh.token);
+function ghBase(v){try{const u=new URL(/^https?:\/\//i.test(v)?v:'https://'+v);return u.protocol==='https:'?u.origin:''}catch(e){return ''}}
+async function gh(path,body){
+  let r;
+  try{r=await fetch(st.gh.url+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json',...(st.gh.token?{Authorization:'Bearer '+st.gh.token}:{})},body:body?JSON.stringify(body):undefined})}
+  catch(e){throw new Error("Can't reach Glowhouse. Check the address, and that the home computer is on.")}
+  let d={};try{d=await r.json()}catch(e){}
+  if(r.status===401&&st.gh.token){st.gh={...st.gh,token:''};save();renderGh();throw new Error('Glowhouse removed this device. Connect again in Setup.')}
+  if(!r.ok) throw new Error(d.error||`Glowhouse answered ${r.status}.`);
+  return d;
+}
+function renderGh(){
+  $('#ghoff').hidden=ghOn();$('#ghon').hidden=!ghOn();
+  $('#ghurl').value=st.gh.url;$('#ghcode').value='';
+  $('#ghstatus').textContent=ghOn()?`Connected to ${new URL(st.gh.url).host}`:'';
+}
+async function connectGh(){
+  const url=ghBase($('#ghurl').value.trim()),code=$('#ghcode').value.replace(/\D/g,''),msg=$('#ghmsg');
+  msg.className='msg bad';
+  if(!url){msg.textContent='Enter the Glowhouse address (https).';return}
+  if(code.length!==6){msg.textContent='Enter the 6-digit code from the Glowhouse admin page.';return}
+  msg.className='msg';msg.textContent='Connecting…';
+  st.gh={url,token:'',tv:st.gh.tv};
+  try{
+    const d=await gh('/api/pair',{code,name:'Reel Index',scope:'play'});
+    st.gh.token=d.token;save();renderGh();
+    const {tvs}=await gh('/api/play/tvs');
+    msg.textContent=tvs.length?`Connected. ${tvs.length} TV${tvs.length>1?'s':''} can take titles.`:'Connected, but no Google TVs are set up in Glowhouse yet.';
+  }catch(e){save();msg.className='msg bad';msg.textContent=e.message}
+}
+async function loadTvPicker(k){
+  const here=()=>$('#tvsend')?.dataset.send===k,sel=$('#tvpick'),msg=$('#tvmsg');
+  try{
+    const {tvs}=await gh('/api/play/tvs');if(!here()) return;
+    if(!tvs.length){sel.innerHTML='<option>No TVs yet</option>';msg.textContent='Add a Google TV in Glowhouse to send titles to it.';return}
+    sel.innerHTML=tvs.map(t=>`<option value="${esc(t.id)}"${t.online?'':' disabled'}>${esc(t.name)}${t.online?'':' (not reachable)'}</option>`).join('');
+    const pick=tvs.find(t=>t.id===st.gh.tv&&t.online)||tvs.find(t=>t.online);
+    if(pick){sel.value=pick.id;sel.disabled=false;$('#tvsend').disabled=false}
+    else msg.textContent="None of the TVs are reachable right now.";
+  }catch(e){if(here()){sel.innerHTML='<option>Glowhouse unavailable</option>';msg.className='msg bad';msg.textContent=e.message}}
+}
+async function sendToTv(k){
+  const it=items.get(k),sel=$('#tvpick'),btn=$('#tvsend'),msg=$('#tvmsg');
+  if(!it||!sel.value) return;
+  const name=sel.selectedOptions[0]?.textContent||'the TV';
+  btn.disabled=true;msg.className='msg';msg.textContent=`Sending to ${name}…`;
+  try{
+    const d=await gh(`/api/play/tvs/${encodeURIComponent(sel.value)}`,{title:it.title});
+    const what=d.how==='link'?`opening "${it.title}"`:`searching for "${it.title}"`;
+    msg.textContent=d.woke?`Turned on ${d.tv}, now ${what}.`:`${d.tv} is ${what}.`;
+  }catch(e){msg.className='msg bad';msg.textContent=e.message}
+  finally{btn.disabled=false}
 }
 
 /* ---------- Share setup ----------
@@ -787,7 +857,7 @@ function openSettings(msg){
   $('#pwahint').hidden=!(standalone()&&!st.key);
   $('#key').value=st.key;
   $('#keymsg').textContent=msg||'';$('#keymsg').className='msg'+(msg?' bad':'');
-  renderSettings();
+  renderSettings();renderGh();$('#ghmsg').textContent='';
   if(!$('#settings').open) $('#settings').showModal();
 }
 async function connect(){
@@ -917,6 +987,7 @@ document.addEventListener('click',async e=>{
   const act=t.closest('[data-act]');
   if(act){e.stopPropagation();toggle(act.dataset.k,act.dataset.act);return}
   if(t.closest('[data-close]')){t.closest('dialog').close();return}
+  const snd=t.closest('#tvsend');if(snd){sendToTv(snd.dataset.send);return}
   if(t.closest('[data-open-settings]')){openSettings();return}
   const c=t.closest('.card');if(c){openDetail(c.dataset.k);return}
   const g=t.closest('[data-g]');
@@ -975,6 +1046,11 @@ async function saveKey(){
   catch(e){$('#keymsg').textContent=errText(e);$('#keymsg').className='msg bad'}
 }
 $('#keysave').addEventListener('click',saveKey);
+$('#ghconnect').addEventListener('click',connectGh);
+$('#ghcode').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();connectGh()}});
+$('#ghurl').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#ghcode').focus()}});
+$('#ghdisc').addEventListener('click',()=>{st.gh={url:st.gh.url,token:'',tv:st.gh.tv};save();renderGh();$('#ghmsg').className='msg';$('#ghmsg').textContent='Disconnected. Remove "Reel Index" on the Glowhouse admin page to fully revoke it.'});
+document.addEventListener('change',e=>{if(e.target.id==='tvpick'){st.gh.tv=e.target.value;save()}});
 $('#sharebtn').addEventListener('click',async()=>{
   const url=shareLink(),msg=$('#sharemsg'),box=$('#sharelink');
   msg.className='msg';
